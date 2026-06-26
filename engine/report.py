@@ -1,167 +1,237 @@
 """
 SEAM PDF Report Generator
-Decision-first layout. Information hierarchy over essay.
-
-Page 1:  Header | Score band (3 cells) | Investment Decision Summary | Critical Risks
-Page 2+: Investment Drivers | Dimension Detail | Verdict | Evidence Reference
+Typography-first. Breathing room. Navy / White / Gold / Red only.
+Decision ID. Assessment Integrity panel. Evidence bar graphic.
 """
 
 from weasyprint import HTML
 from engine.scoring import ScoringResult
 from datetime import datetime
 import os
+import hashlib
 
-AMBER  = "#C8962E"
-NAVY   = "#0B1929"
+AMBER = "#C8962E"
+NAVY  = "#0B1929"
+RED   = "#CC0000"
+WHITE = "#FFFFFF"
 
 VERDICT_COLOURS = {
     "PROCEED":                 "#1A7A3A",
     "PROCEED WITH CONDITIONS": "#B8860B",
     "MONITOR":                 "#1A5FA8",
     "CAUTION":                 "#C65C00",
-    "AVOID":                   "#CC0000",
+    "AVOID":                   RED,
 }
 
-CONFIDENCE_COLOURS = {
-    "High":   "#1A7A3A",
-    "Medium": "#B8860B",
-    "Low":    "#CC0000",
+IMPACT_MAP = {
+    "D1": ("High",   "25%"),
+    "D2": ("High",   "20%"),
+    "D3": ("High",   "20%"),
+    "D4": ("Medium", "15%"),
+    "D5": ("Medium", "12%"),
+    "D6": ("Low",    "8%"),
 }
 
 
-def mini_bar(score: float, width: int = 140) -> str:
+def decision_id(result: ScoringResult) -> str:
+    h = hashlib.sha256(f"{result.asset_id}{result.generated_at}".encode()).hexdigest()[:6].upper()
+    year = result.generated_at[:4]
+    return f"SEAM-{year}-{result.jurisdiction_code if hasattr(result, 'jurisdiction_code') else result.asset_id[:3]}-{h}"
+
+
+def evidence_bar_svg(retrieved: int, total: int, width: int = 320) -> str:
+    """Single horizontal evidence bar. Navy/gold only."""
+    pct = retrieved / total if total > 0 else 0
+    filled = int(pct * width)
+    defaulted = total - retrieved
+    pct_label = f"{round(pct * 100)}%" if pct > 0 else "None retrieved"
+    return f"""
+    <div style="margin:16px 0 8px 0;">
+      <div style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Evidence Coverage</div>
+      <div style="background:#e8e8e8;border-radius:3px;height:12px;width:{width}px;">
+        <div style="background:{AMBER};border-radius:3px;height:12px;width:{filled}px;"></div>
+      </div>
+      <div style="display:flex;margin-top:5px;font-size:10px;color:#555;">
+        <span style="margin-right:16px;"><strong style="color:{NAVY};">{total}</strong> assessed</span>
+        <span style="margin-right:16px;"><strong style="color:{AMBER if retrieved > 0 else '#aaa'};">{retrieved}</strong> retrieved</span>
+        <span><strong style="color:#aaa;">{defaulted}</strong> defaulted</span>
+      </div>
+    </div>"""
+
+
+def score_bar(score: float, width: int = 140, dark: bool = True) -> str:
     filled = max(0, int((score / 100) * width))
+    bg = "#2a3f55" if dark else "#e0e0e0"
     return (
-        f'<div style="background:#2a3f55;border-radius:2px;height:6px;width:{width}px;margin-top:5px;">'
-        f'<div style="background:{AMBER};border-radius:2px;height:6px;width:{filled}px;"></div>'
+        f'<div style="background:{bg};border-radius:2px;height:5px;width:{width}px;margin-top:5px;">'
+        f'<div style="background:{AMBER};border-radius:2px;height:5px;width:{filled}px;"></div>'
         f'</div>'
-    )
-
-
-def score_bar_light(score: float, width: int = 150) -> str:
-    filled = max(0, int((score / 100) * width))
-    return (
-        f'<div style="background:#e0e0e0;border-radius:2px;height:6px;width:{width}px;margin-top:4px;">'
-        f'<div style="background:{AMBER};border-radius:2px;height:6px;width:{filled}px;"></div>'
-        f'</div>'
-    )
-
-
-def confidence_pill(level: str) -> str:
-    col = CONFIDENCE_COLOURS.get(level, "#888")
-    return (
-        f'<span style="display:inline-block;padding:1px 6px;border-radius:8px;'
-        f'background:{col};color:white;font-size:9px;font-weight:bold;'
-        f'letter-spacing:0.3px;vertical-align:middle;margin-left:6px;">{level}</span>'
     )
 
 
 def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
-    vc     = VERDICT_COLOURS.get(result.verdict, "#333")
-    gen    = datetime.fromisoformat(result.generated_at).strftime("%d %B %Y, %H:%M UTC")
-    ec     = result.evidence_completeness_score
+    vc_colour = VERDICT_COLOURS.get(result.verdict, "#333")
+    gen       = datetime.fromisoformat(result.generated_at).strftime("%d %B %Y, %H:%M UTC")
+    ec        = result.evidence_completeness_score
+    did       = decision_id(result)
 
-    # Pull structured intel blocks — graceful fallback for legacy shape
-    inv_dec  = intel.get("investment_decision", {})
-    v_conf   = inv_dec.get("verdict_confidence", "Low")
-    cr_count = inv_dec.get("critical_risks", len(result.floor_rules_triggered))
-
-    drivers      = intel.get("investment_drivers", {})
-    positives    = drivers.get("positive", [])
-    negatives    = drivers.get("negative", [])
-    unknowns     = drivers.get("unknown", [])
-    ev_summary   = intel.get("evidence_summary", "")
+    inv_dec        = intel.get("investment_decision", {})
+    v_conf         = inv_dec.get("verdict_confidence", "Low")
+    cr_count       = len(result.floor_rules_triggered)
     critical_risks = intel.get("critical_risks", [])
+    drivers        = intel.get("investment_drivers", {})
+    ev_summary     = intel.get("evidence_summary", "")
+    intel_items    = intel.get("investor_intelligence", [])
+    verdict_text   = intel.get("verdict_section", "")
 
-    # Verdict confidence colour
-    vc_colour = CONFIDENCE_COLOURS.get(v_conf, "#888")
+    # Field counts
+    total_fields = 19
+    retrieved_count = sum([
+        asset_input.fraser_investment_attractiveness is not None,
+        asset_input.wb_rule_of_law_percentile is not None,
+        asset_input.wb_regulatory_quality_percentile is not None,
+        asset_input.eiti_implementation_status != "non-implementing",
+        asset_input.eiti_compliant_country is True,
+        asset_input.eiti_payment_disclosure_quality is not None,
+        asset_input.beneficial_ownership_disclosure != "none",
+        asset_input.resource_estimate_standard != "none",
+        asset_input.reserve_classification != "none",
+        asset_input.production_data_availability != "none",
+        bool(asset_input.commodity and "retrieval required" not in asset_input.commodity.lower()),
+        asset_input.licence_holder_status != "other",
+        asset_input.locas_filing_status != "not_filed",
+        asset_input.power_supply != "none",
+        asset_input.road_access != "none",
+        asset_input.water_supply != "none",
+        asset_input.port_distance_km is not None,
+        asset_input.active_dfi_engagement != "none",
+        asset_input.listed_vehicle != "unlisted",
+    ])
 
-    # --- Investment Decision Summary panel ---
+    # Evidence coverage label
+    if retrieved_count == 0:
+        coverage_label = "None retrieved"
+    elif ec < 20:
+        coverage_label = "Very low"
+    elif ec < 50:
+        coverage_label = "Partial"
+    elif ec < 80:
+        coverage_label = "Moderate"
+    else:
+        coverage_label = "High"
+
+    # --- Decision panel (4 cells, navy/gold/red only) ---
     decision_panel = f"""
-    <table style="width:100%;border-collapse:collapse;margin-bottom:16px;border:1px solid #e0e0e0;">
+    <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
       <tr>
-        <td style="background:{NAVY};padding:14px 18px;width:26%;vertical-align:middle;border-right:1px solid #2a3f55;">
-          <div style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:0.5px;">Investment Readiness</div>
-          <div style="font-size:40px;font-weight:bold;color:{AMBER};line-height:1;margin-top:3px;">{result.investment_readiness_score}</div>
-          <div style="font-size:9px;color:#666;">out of 100</div>
-          {mini_bar(result.investment_readiness_score, 120)}
+        <td style="background:{NAVY};padding:20px 22px;width:25%;vertical-align:top;border-right:1px solid #2a3f55;">
+          <div style="font-size:9px;color:#666;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">Investment Readiness</div>
+          <div style="font-size:46px;font-weight:bold;color:{AMBER};line-height:1;">{result.investment_readiness_score}</div>
+          <div style="font-size:10px;color:#555;margin-top:4px;">out of 100</div>
+          {score_bar(result.investment_readiness_score, 120, dark=True)}
         </td>
-        <td style="background:#162436;padding:14px 18px;width:26%;vertical-align:middle;border-right:1px solid #2a3f55;">
-          <div style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:0.5px;">Evidence Completeness</div>
-          <div style="font-size:40px;font-weight:bold;color:#7eb8d4;line-height:1;margin-top:3px;">{ec}</div>
-          <div style="font-size:9px;color:#666;">out of 100</div>
-          {mini_bar(ec, 120)}
+        <td style="background:#0f1e2e;padding:20px 22px;width:25%;vertical-align:top;border-right:1px solid #2a3f55;">
+          <div style="font-size:9px;color:#666;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">Evidence Completeness</div>
+          <div style="font-size:46px;font-weight:bold;color:#7eb8d4;line-height:1;">{ec}</div>
+          <div style="font-size:10px;color:#555;margin-top:4px;">{coverage_label}</div>
+          {score_bar(ec, 120, dark=True)}
         </td>
-        <td style="background:{vc};padding:14px 18px;width:28%;vertical-align:middle;border-right:1px solid rgba(255,255,255,0.15);">
-          <div style="font-size:9px;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.5px;">Verdict</div>
-          <div style="font-size:22px;font-weight:bold;color:white;line-height:1.1;margin-top:3px;">{result.verdict}</div>
-          <div style="margin-top:6px;">
-            <span style="font-size:9px;color:rgba(255,255,255,0.6);">Confidence: </span>
-            <span style="display:inline-block;padding:1px 7px;border-radius:8px;background:rgba(255,255,255,0.2);color:white;font-size:9px;font-weight:bold;">{v_conf}</span>
-          </div>
+        <td style="background:{vc_colour};padding:20px 22px;width:28%;vertical-align:top;border-right:1px solid rgba(255,255,255,0.1);">
+          <div style="font-size:9px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">Verdict</div>
+          <div style="font-size:26px;font-weight:bold;color:{WHITE};line-height:1.1;">{result.verdict}</div>
+          <div style="margin-top:10px;font-size:10px;color:rgba(255,255,255,0.6);">Evidence Confidence</div>
+          <div style="font-size:13px;font-weight:bold;color:{WHITE};margin-top:2px;">{v_conf}</div>
         </td>
-        <td style="background:#f8f4ec;padding:14px 18px;width:20%;vertical-align:middle;">
-          <div style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">At a Glance</div>
-          <div style="font-size:11px;color:#333;margin-bottom:4px;">
-            <span style="color:{CONFIDENCE_COLOURS.get('Low','#CC0000') if cr_count > 0 else '#1A7A3A'};font-weight:bold;">{cr_count}</span>
-            <span style="color:#666;"> critical risks</span>
+        <td style="background:#f9f6f0;padding:20px 22px;width:22%;vertical-align:top;">
+          <div style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:10px;">At a Glance</div>
+          <div style="margin-bottom:7px;">
+            <div style="font-size:10px;color:#888;">Critical risks</div>
+            <div style="font-size:18px;font-weight:bold;color:{RED if cr_count > 0 else NAVY};">{cr_count}</div>
           </div>
-          <div style="font-size:11px;color:#333;margin-bottom:4px;">
-            <span style="font-weight:bold;color:#333;">{ec}%</span>
-            <span style="color:#666;"> evidence coverage</span>
+          <div style="margin-bottom:7px;">
+            <div style="font-size:10px;color:#888;">Evidence fields</div>
+            <div style="font-size:13px;font-weight:bold;color:{NAVY};">{retrieved_count} / {total_fields}</div>
           </div>
-          <div style="margin-top:8px;font-size:10px;font-weight:bold;color:{vc};">{result.next_action.split('.')[0]}.</div>
+          <div style="margin-top:10px;font-size:10px;font-weight:bold;color:{vc_colour};line-height:1.3;">{result.next_action.split('.')[0]}.</div>
         </td>
       </tr>
     </table>"""
 
-    # --- Critical Risks panel ---
+    # --- Evidence bar ---
+    ev_bar = evidence_bar_svg(retrieved_count, total_fields)
+
+    # --- Critical risks ---
     risks_html = ""
     if critical_risks:
-        risk_rows = "".join(
-            f'<div style="display:flex;margin-bottom:7px;align-items:flex-start;">'
-            f'<div style="min-width:18px;height:18px;background:#CC0000;border-radius:50%;'
+        rows = "".join(
+            f'<div style="display:flex;align-items:flex-start;margin-bottom:10px;">'
+            f'<div style="min-width:20px;height:20px;background:{RED};border-radius:50%;'
             f'display:flex;align-items:center;justify-content:center;'
-            f'font-size:9px;font-weight:bold;color:white;margin-right:8px;margin-top:1px;flex-shrink:0;">{i}</div>'
-            f'<div style="font-size:11px;color:#333;line-height:1.45;">{r}</div>'
+            f'font-size:9px;font-weight:bold;color:{WHITE};margin-right:10px;margin-top:1px;flex-shrink:0;">{i}</div>'
+            f'<div style="font-size:11px;color:#333;line-height:1.5;">{r}</div>'
             f'</div>'
             for i, r in enumerate(critical_risks, 1)
         )
         risks_html = f"""
-        <div style="margin-bottom:16px;">
-          <div style="font-size:10px;font-weight:bold;color:#CC0000;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Critical Risks</div>
-          {risk_rows}
+        <div style="margin-bottom:24px;">
+          <div style="font-size:10px;font-weight:bold;color:{RED};text-transform:uppercase;letter-spacing:0.5px;border-bottom:1.5px solid {RED};padding-bottom:4px;margin-bottom:12px;">Exclusion Conditions</div>
+          {rows}
         </div>"""
 
-    # --- Investment Drivers (3 columns) ---
-    def driver_col(items, label, dot_col):
+    # --- Investment Drivers (hierarchy: negative dominates) ---
+    def driver_list(items, col, size="11px", weight="normal"):
         if not items:
-            return ""
-        rows = "".join(
-            f'<div style="display:flex;margin-bottom:5px;align-items:flex-start;">'
-            f'<div style="min-width:7px;height:7px;background:{dot_col};border-radius:50%;margin-right:7px;margin-top:4px;flex-shrink:0;"></div>'
-            f'<div style="font-size:11px;color:#333;line-height:1.4;">{item}</div>'
+            return '<div style="font-size:10px;color:#aaa;font-style:italic;">None identified</div>'
+        return "".join(
+            f'<div style="display:flex;align-items:flex-start;margin-bottom:6px;">'
+            f'<div style="min-width:7px;height:7px;background:{col};border-radius:50%;margin-right:8px;margin-top:4px;flex-shrink:0;"></div>'
+            f'<div style="font-size:{size};font-weight:{weight};color:#333;line-height:1.4;">{item}</div>'
             f'</div>'
             for item in items
         )
-        return f"""
-        <td style="width:33%;padding:0 8px;vertical-align:top;">
-          <div style="font-size:9px;font-weight:bold;color:{dot_col};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:7px;">{label}</div>
-          {rows}
-        </td>"""
 
     drivers_html = ""
-    if positives or negatives or unknowns:
+    if drivers:
+        pos_items = drivers.get("positive", [])
+        neg_items = drivers.get("negative", [])
+        unk_items = drivers.get("unknown", [])
         drivers_html = f"""
-        <div style="margin-bottom:16px;">
-          <div style="font-size:10px;font-weight:bold;color:{NAVY};text-transform:uppercase;letter-spacing:0.5px;border-bottom:1.5px solid {AMBER};padding-bottom:3px;margin-bottom:10px;">Investment Drivers</div>
+        <div style="margin-bottom:24px;">
+          <div style="font-size:10px;font-weight:bold;color:{NAVY};text-transform:uppercase;letter-spacing:0.5px;border-bottom:1.5px solid {AMBER};padding-bottom:4px;margin-bottom:14px;">Investment Drivers</div>
           <table style="width:100%;border-collapse:collapse;">
             <tr style="vertical-align:top;">
-              {driver_col(positives, 'Positive', '#1A7A3A')}
-              {driver_col(negatives, 'Negative', '#CC0000')}
-              {driver_col(unknowns, 'Unknown', '#888')}
+              <td style="width:40%;padding-right:16px;border-right:1px solid #eee;">
+                <div style="font-size:9px;font-weight:bold;color:{RED};text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">Negative</div>
+                {driver_list(neg_items, RED, "12px", "bold")}
+              </td>
+              <td style="width:30%;padding:0 16px;border-right:1px solid #eee;">
+                <div style="font-size:9px;font-weight:bold;color:{NAVY};text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">Positive</div>
+                {driver_list(pos_items, AMBER, "11px")}
+              </td>
+              <td style="width:30%;padding-left:16px;">
+                <div style="font-size:9px;font-weight:bold;color:#888;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">Unknown</div>
+                {driver_list(unk_items, "#aaa", "11px")}
+              </td>
             </tr>
           </table>
+        </div>"""
+
+    # --- Material unknowns ---
+    unknowns_html = ""
+    if intel_items:
+        rows = "".join(
+            f'<div style="display:flex;align-items:flex-start;margin-bottom:10px;">'
+            f'<div style="min-width:20px;height:20px;background:{NAVY};border-radius:50%;'
+            f'display:flex;align-items:center;justify-content:center;'
+            f'font-size:9px;font-weight:bold;color:{WHITE};margin-right:10px;margin-top:1px;flex-shrink:0;">{idx}</div>'
+            f'<div style="font-size:11px;color:#444;line-height:1.5;">{f}</div>'
+            f'</div>'
+            for idx, f in enumerate(intel_items, 1)
+        )
+        unknowns_html = f"""
+        <div style="margin-bottom:24px;">
+          <div style="font-size:10px;font-weight:bold;color:{NAVY};text-transform:uppercase;letter-spacing:0.5px;border-bottom:1.5px solid {AMBER};padding-bottom:4px;margin-bottom:12px;">Material Unknowns</div>
+          {rows}
         </div>"""
 
     # --- Dimension cards ---
@@ -173,90 +243,84 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
             dim_intel = intel.get("dimension_findings", {}).get(d.code, {})
             finding   = dim_intel.get("finding", "") if isinstance(dim_intel, dict) else str(dim_intel)
             conf      = dim_intel.get("evidence_confidence", "Low") if isinstance(dim_intel, dict) else "Low"
+            impact, _ = IMPACT_MAP.get(d.code, ("Low", ""))
+
+            conf_col   = {NAVY: NAVY, "High": "#1A7A3A", "Medium": "#B8860B", "Low": RED}.get(conf, "#888")
+            impact_col = {"High": RED, "Medium": AMBER, "Low": "#888"}.get(impact, "#888")
 
             gaps_html = "".join(
-                f'<div style="font-size:10px;color:#C65C00;margin-top:2px;">&#9888; {g}</div>'
+                f'<div style="font-size:10px;color:{RED};margin-top:3px;">&#9888; {g}</div>'
                 for g in d.data_gaps
             )
-            adj_html = ""
-            for a in d.adjustments:
-                if a.get("adjustment") is not None:
-                    col = "#1A7A3A" if a["adjustment"] > 0 else "#CC0000"
-                    sign = "+" if a["adjustment"] > 0 else ""
-                    adj_html += f'<div style="font-size:10px;color:{col};margin-top:2px;">{sign}{a["adjustment"]}pts: {a["reason"]}</div>'
 
-            # Format Gap: lines in the finding
             formatted = ""
             for line in finding.split("\n"):
                 line = line.strip()
                 if not line:
                     continue
                 if line.lower().startswith("gap:"):
-                    formatted += f'<div style="font-size:10px;color:#C65C00;margin-top:2px;">&#9888; {line[4:].strip()}</div>'
+                    formatted += f'<div style="font-size:10px;color:{RED};margin-top:3px;">&#9888; {line[4:].strip()}</div>'
                 else:
-                    formatted += f'<div style="font-size:10px;color:#444;margin-top:3px;line-height:1.4;">{line}</div>'
+                    formatted += f'<div style="font-size:10px;color:#444;margin-top:4px;line-height:1.45;">{line}</div>'
 
             row += f"""
-            <td style="width:50%;padding:3px;">
-              <div style="border:1px solid #e8e8e8;border-radius:3px;padding:10px 12px;">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <td style="width:50%;padding:4px;">
+              <div style="border:1px solid #e8e8e8;border-radius:3px;padding:12px 14px;background:{WHITE};">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
                   <div>
-                    <span style="font-size:10px;font-weight:bold;color:{NAVY};">{d.code}</span>
-                    <span style="font-size:10px;color:#555;margin-left:4px;">{d.name}</span>
-                    {confidence_pill(conf)}
+                    <span style="font-size:11px;font-weight:bold;color:{NAVY};">{d.code}</span>
+                    <span style="font-size:10px;color:#555;margin-left:5px;">{d.name}</span>
                   </div>
-                  <div style="text-align:right;">
-                    <span style="font-size:18px;font-weight:bold;color:{NAVY};">{d.adjusted_score:.0f}</span>
-                    <span style="font-size:9px;color:#aaa;">/100</span>
-                  </div>
+                  <span style="font-size:19px;font-weight:bold;color:{NAVY};">{d.adjusted_score:.0f}<span style="font-size:9px;color:#aaa;font-weight:normal;">/100</span></span>
                 </div>
-                {score_bar_light(d.adjusted_score, 150)}
-                <div style="font-size:9px;color:#aaa;margin-top:2px;margin-bottom:4px;">Weight {int(d.weight*100)}%{adj_html}</div>
+                {score_bar(d.adjusted_score, 160, dark=False)}
+                <div style="display:flex;gap:10px;margin-top:5px;margin-bottom:6px;">
+                  <span style="font-size:9px;color:{conf_col};">Evidence: {conf}</span>
+                  <span style="font-size:9px;color:{impact_col};">Impact: {impact}</span>
+                </div>
                 {gaps_html}
                 {formatted}
               </div>
             </td>"""
 
         if len(dims[i:i+2]) == 1:
-            row += '<td style="width:50%;padding:3px;"></td>'
+            row += '<td style="width:50%;padding:4px;"></td>'
         dim_cards += f'<tr style="vertical-align:top;">{row}</tr>'
 
-    # --- Floor rules detail ---
+    # --- Floor rules ---
     floor_html = ""
     if result.floor_rules_triggered:
         rows = "".join(
             f'<tr>'
-            f'<td style="padding:4px 10px;font-size:10px;font-weight:bold;color:#C65C00;white-space:nowrap;">{r["code"]}</td>'
-            f'<td style="padding:4px 10px;font-size:10px;color:#333;">{r["description"]}</td>'
+            f'<td style="padding:5px 12px;font-size:10px;font-weight:bold;color:{RED};white-space:nowrap;">{r["code"]}</td>'
+            f'<td style="padding:5px 12px;font-size:10px;color:#333;">{r["description"]}</td>'
             f'</tr>'
             for r in result.floor_rules_triggered
         )
         floor_html = f"""
-        <div style="margin-top:12px;">
-          <div style="font-size:9px;font-weight:bold;color:#C65C00;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:5px;">Floor Rules</div>
-          <table style="width:100%;border-collapse:collapse;background:#fffaf0;border:1px solid #f0d0a0;">
+        <div style="margin-top:14px;">
+          <div style="font-size:9px;font-weight:bold;color:{RED};text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px;">Exclusion Conditions Detail</div>
+          <table style="width:100%;border-collapse:collapse;background:#fff8f8;border:1px solid #f0c0c0;">
             {rows}
           </table>
         </div>"""
 
-    verdict_text = intel.get("verdict_section", "")
-
-    # --- Intelligence items (renamed from "What Investor Does Not Know") ---
-    intel_items_html = ""
-    intel_items = intel.get("investor_intelligence", [])
-    if intel_items:
-        items_html = "".join(
-            f'<div style="display:flex;margin-bottom:10px;align-items:flex-start;">'
-            f'<div style="min-width:20px;height:20px;background:{NAVY};border-radius:50%;'
-            f'display:flex;align-items:center;justify-content:center;'
-            f'font-size:9px;font-weight:bold;color:white;margin-right:8px;margin-top:1px;flex-shrink:0;">{idx}</div>'
-            f'<div style="font-size:11px;color:#333;line-height:1.5;">{f}</div>'
-            f'</div>'
-            for idx, f in enumerate(intel_items, 1)
-        )
-        intel_items_html = f"""
-        <div style="font-size:10px;font-weight:bold;color:{NAVY};text-transform:uppercase;letter-spacing:0.5px;border-bottom:1.5px solid {AMBER};padding-bottom:3px;margin-bottom:10px;">Material Unknowns</div>
-        {items_html}"""
+    # --- Assessment Integrity panel ---
+    integrity_html = f"""
+    <div style="margin-top:20px;padding:14px 18px;background:{NAVY};border-radius:3px;">
+      <div style="font-size:9px;color:#666;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Assessment Integrity</div>
+      <table style="width:100%;border-collapse:collapse;">
+        <tr>
+          {''.join(
+            f'<td style="width:25%;padding:0 8px;text-align:center;">'
+            f'<div style="font-size:16px;color:{AMBER};">&#10003;</div>'
+            f'<div style="font-size:9px;color:#999;margin-top:3px;">{label}</div>'
+            f'</td>'
+            for label in ['Deterministic', 'Evidence Referenced', 'Replayable', 'Version Locked']
+          )}
+        </tr>
+      </table>
+    </div>"""
 
     html = f"""<!DOCTYPE html>
 <html>
@@ -265,9 +329,9 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
 <style>
   @page {{
     size: A4;
-    margin: 14mm 13mm 14mm 13mm;
+    margin: 18mm 16mm 18mm 16mm;
     @bottom-center {{
-      content: "SEAM  |  {result.asset_id}  |  {result.methodology_version}  |  CONFIDENTIAL  |  Page " counter(page) " of " counter(pages);
+      content: "{did}  |  CONFIDENTIAL  |  Page " counter(page) " of " counter(pages);
       font-family: Arial, sans-serif;
       font-size: 8px;
       color: #bbb;
@@ -277,54 +341,67 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
     font-family: Arial, sans-serif;
     font-size: 11px;
     color: #222;
-    margin: 0; padding: 0;
-    line-height: 1.4;
+    margin: 0;
+    padding: 0;
+    line-height: 1.5;
   }}
   h2 {{
     font-size: 10px;
     color: {NAVY};
-    margin: 16px 0 7px 0;
+    margin: 24px 0 10px 0;
     text-transform: uppercase;
-    letter-spacing: 0.6px;
+    letter-spacing: 0.7px;
     border-bottom: 1.5px solid {AMBER};
-    padding-bottom: 3px;
+    padding-bottom: 4px;
   }}
 </style>
 </head>
 <body>
 
 <!-- HEADER -->
-<table style="width:100%;margin-bottom:12px;">
+<table style="width:100%;margin-bottom:14px;">
   <tr>
     <td style="vertical-align:middle;">
-      <span style="font-size:22px;font-weight:bold;color:{AMBER};letter-spacing:1px;">SEAM</span>
-      <span style="font-size:9px;color:{NAVY};letter-spacing:0.4px;margin-left:8px;">STRUCTURED EVIDENCE FOR AFRICAN MINING</span>
+      <span style="font-size:24px;font-weight:bold;color:{AMBER};letter-spacing:1.5px;">SEAM</span>
+      <span style="font-size:9px;color:{NAVY};letter-spacing:0.4px;margin-left:10px;vertical-align:middle;">STRUCTURED EVIDENCE FOR AFRICAN MINING</span>
     </td>
     <td style="text-align:right;vertical-align:middle;">
-      <div style="font-size:9px;color:#888;">Investment Readiness Report &nbsp;|&nbsp; {gen}</div>
+      <div style="font-size:9px;color:#888;">Investment Readiness Report</div>
+      <div style="font-size:9px;color:#888;">{gen}</div>
       <div style="font-size:9px;color:#888;">{result.methodology_version} &nbsp;|&nbsp; {result.rules_version}</div>
     </td>
   </tr>
 </table>
-<div style="height:2px;background:{NAVY};margin-bottom:10px;"></div>
+<div style="height:2px;background:{NAVY};margin-bottom:16px;"></div>
 
-<!-- ASSET IDENTITY -->
-<div style="font-size:15px;font-weight:bold;color:{NAVY};margin-bottom:2px;">{result.asset_name}</div>
-<div style="font-size:9px;color:#888;margin-bottom:10px;">
-  {asset_input.jurisdiction} &nbsp;|&nbsp; {asset_input.province} &nbsp;|&nbsp; {asset_input.commodity} &nbsp;|&nbsp; ID: {result.asset_id}
-</div>
+<!-- DECISION ID + ASSET -->
+<table style="width:100%;margin-bottom:16px;">
+  <tr>
+    <td style="vertical-align:bottom;">
+      <div style="font-size:17px;font-weight:bold;color:{NAVY};margin-bottom:3px;">{result.asset_name}</div>
+      <div style="font-size:9px;color:#888;">{asset_input.jurisdiction} &nbsp;|&nbsp; {asset_input.province} &nbsp;|&nbsp; {asset_input.commodity}</div>
+    </td>
+    <td style="text-align:right;vertical-align:bottom;">
+      <div style="font-size:9px;color:#aaa;text-transform:uppercase;letter-spacing:0.4px;">Decision ID</div>
+      <div style="font-size:11px;font-weight:bold;color:{NAVY};font-family:monospace;">{did}</div>
+    </td>
+  </tr>
+</table>
 
 <!-- DECISION PANEL -->
 {decision_panel}
 
-<!-- CRITICAL RISKS -->
+<!-- EVIDENCE BAR -->
+{ev_bar}
+
+<!-- EXCLUSION CONDITIONS -->
 {risks_html}
 
 <!-- INVESTMENT DRIVERS -->
 {drivers_html}
 
 <!-- MATERIAL UNKNOWNS -->
-{intel_items_html}
+{unknowns_html}
 
 <!-- DIMENSION DETAIL -->
 <h2>Dimension Detail</h2>
@@ -334,43 +411,42 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
 
 <!-- VERDICT -->
 <h2>Verdict and Next Action</h2>
-<table style="width:100%;border-collapse:collapse;margin-bottom:10px;">
+<table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
   <tr>
-    <td style="background:{vc};padding:10px 16px;">
-      <div style="font-size:9px;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.4px;">Verdict</div>
-      <div style="font-size:16px;font-weight:bold;color:white;margin-top:2px;">{result.verdict}</div>
+    <td style="background:{vc_colour};padding:14px 20px;">
+      <div style="font-size:9px;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Verdict</div>
+      <div style="font-size:20px;font-weight:bold;color:{WHITE};">{result.verdict}</div>
     </td>
   </tr>
 </table>
-<div style="font-size:11px;color:#333;line-height:1.55;margin-bottom:10px;">
-  {verdict_text.replace(chr(10), "<br>")}
-</div>
+<div style="font-size:11px;color:#333;line-height:1.6;margin-bottom:12px;">{verdict_text.replace(chr(10), "<br>")}</div>
 {floor_html}
-<div style="margin-top:10px;padding:10px 13px;background:#f8f8f8;border-left:3px solid {AMBER};">
-  <div style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:3px;">Next Action</div>
-  <div style="font-size:11px;color:#222;font-weight:bold;">{result.next_action}</div>
+<div style="margin-top:14px;padding:12px 16px;background:#f8f8f8;border-left:3px solid {AMBER};">
+  <div style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;">Next Action</div>
+  <div style="font-size:12px;font-weight:bold;color:{NAVY};">{result.next_action}</div>
 </div>
 
 <!-- EVIDENCE SUMMARY -->
 <h2>Evidence Summary</h2>
-<div style="font-size:11px;color:#444;line-height:1.55;margin-bottom:10px;">{ev_summary}</div>
+<div style="font-size:11px;color:#444;line-height:1.6;margin-bottom:12px;">{ev_summary}</div>
 
 <!-- EVIDENCE REFERENCE -->
 <h2>Evidence Reference</h2>
 <table style="width:100%;font-size:10px;color:#666;border-collapse:collapse;">
-  <tr><td style="padding:3px 0;width:36%;"><strong>Methodology</strong></td><td>{result.methodology_version}</td></tr>
-  <tr><td style="padding:3px 0;"><strong>Rules Version</strong></td><td>{result.rules_version}</td></tr>
-  <tr><td style="padding:3px 0;"><strong>Generated</strong></td><td>{gen}</td></tr>
-  <tr><td style="padding:3px 0;"><strong>Asset ID</strong></td><td>{result.asset_id}</td></tr>
-  <tr><td style="padding:3px 0;"><strong>Evidence Completeness</strong></td><td>{ec}/100. Computed from retrieved vs defaulted fields. Reflects evidence coverage, not asset quality.</td></tr>
-  <tr><td style="padding:3px 0;"><strong>Scoring Engine</strong></td><td>Deterministic rules engine. No language model in scoring path. Identical inputs always produce identical scores, verdicts and floor rule outcomes.</td></tr>
-  <tr><td style="padding:3px 0;"><strong>Intelligence Engine</strong></td><td>SEAM Intelligence Engine, constrained to the evidence envelope. Cannot alter scores, verdicts or floor rules.</td></tr>
-  <tr><td style="padding:3px 0;"><strong>Data Sources</strong></td><td>EITI, Fraser Institute, World Bank WGI, USGS, ASX/TSX/AIM filings, Ministry of Mines, cadastre portals</td></tr>
+  <tr><td style="padding:4px 0;width:36%;color:#888;"><strong>Decision ID</strong></td><td style="font-family:monospace;">{did}</td></tr>
+  <tr><td style="padding:4px 0;color:#888;"><strong>Methodology</strong></td><td>{result.methodology_version}</td></tr>
+  <tr><td style="padding:4px 0;color:#888;"><strong>Rules Version</strong></td><td>{result.rules_version}</td></tr>
+  <tr><td style="padding:4px 0;color:#888;"><strong>Generated</strong></td><td>{gen}</td></tr>
+  <tr><td style="padding:4px 0;color:#888;"><strong>Evidence Completeness</strong></td><td>{ec}/100 ({coverage_label}). {retrieved_count} of {total_fields} key fields retrieved from public sources.</td></tr>
+  <tr><td style="padding:4px 0;color:#888;"><strong>Scoring Engine</strong></td><td>Deterministic rules engine. No language model in scoring path. Identical inputs always produce identical scores, verdicts and floor rule outcomes.</td></tr>
+  <tr><td style="padding:4px 0;color:#888;"><strong>Intelligence Engine</strong></td><td>SEAM Intelligence Engine, constrained to the evidence envelope. Cannot alter scores, verdicts or floor rules.</td></tr>
+  <tr><td style="padding:4px 0;color:#888;"><strong>Data Sources</strong></td><td>EITI, Fraser Institute, World Bank WGI, USGS, ASX/TSX/AIM/LSE filings, Ministry of Mines publications, government cadastre portals, S&P Capital IQ (public), Refinitiv Eikon (public), ICIJ Offshore Leaks</td></tr>
 </table>
 
-<div style="margin-top:16px;padding-top:8px;border-top:1px solid #eee;font-size:9px;color:#bbb;text-align:center;">
-  For informational purposes only. Not investment, legal or financial advice. Not a substitute for independent due diligence.
-  akinmade.co.uk &nbsp;|&nbsp; CONFIDENTIAL
+{integrity_html}
+
+<div style="margin-top:20px;padding-top:10px;border-top:1px solid #eee;font-size:9px;color:#ccc;text-align:center;">
+  For informational purposes only. Not investment, legal or financial advice. Not a substitute for independent due diligence. &nbsp; akinmade.co.uk &nbsp;|&nbsp; CONFIDENTIAL
 </div>
 
 </body>
@@ -382,6 +458,7 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
 def generate_pdf(result: ScoringResult, intel: dict, asset_input, output_dir: str = "output") -> str:
     os.makedirs(output_dir, exist_ok=True)
     html = build_html(result, intel, asset_input)
-    output_path = os.path.join(output_dir, f"{result.asset_id}_SEAM_Report.pdf")
+    safe_name = result.asset_id.replace("/", "-")
+    output_path = os.path.join(output_dir, f"{safe_name}_SEAM_Report.pdf")
     HTML(string=html).write_pdf(output_path)
     return output_path
