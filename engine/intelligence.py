@@ -1,14 +1,12 @@
 """
 SEAM Intelligence Layer
-Sprint 2 — Constrained technical editor. Institutional documentation register.
+Constrained technical editor. Institutional documentation register.
 
-Role:
-1. Surface what the investor does not know — grounded in the evidence envelope
-2. Produce institutional documentation, not intelligent prose
+Role: surface what the investor does not know, grounded in the evidence envelope.
+Produce investment documentation. Not prose. Not analysis. Documentation.
 
 The intelligence engine never scores. The rules engine scores.
 The intelligence engine never softens a verdict. The rules engine sets the verdict.
-The intelligence engine produces technical documentation.
 """
 
 import urllib.request
@@ -18,141 +16,121 @@ import os
 from engine.scoring import ScoringResult, AssetInput
 
 
-# ---------------------------------------------------------------------------
-# SYSTEM PROMPT
-# ---------------------------------------------------------------------------
+SEAM_SYSTEM_PROMPT = """You are producing investment documentation for a professional investor considering an African mining asset.
 
-SEAM_SYSTEM_PROMPT = """You are a technical editor producing institutional investment documentation for African mining assets.
+REGISTER: Wood Mackenzie. S&P Global Commodity Insights. SRK technical memorandum.
+Cold. Factual. No personality. No persuasion. No flourish. No explanation of methodology.
 
-You are not writing an essay. You are not writing a narrative. You are producing a due diligence memorandum.
+THE READER:
+A senior investment professional. They assume the scoring system works. They do not need it explained.
+They want to know: Can I invest? Why not? What is missing? What do I do next?
+Nothing else.
 
-YOUR REGISTER: Bloomberg Intelligence. Fitch Ratings. SRK Consulting technical report. Aircraft incident report.
-Cold. Clinical. Factual. Cited. No personality. No persuasion. No flourish.
-
-YOU RECEIVE:
-- Deterministic scores and verdicts from the SEAM Rules Engine
-- Six dimension scores with sub-scores, adjustments and data gaps
-- Raw asset data fields with retrieval status (RETRIEVED vs NOT RETRIEVED)
-
-YOUR OUTPUT: Four documentation blocks. Each block has a strict format defined below.
+YOUR OUTPUT: Five blocks. Strict format. No deviation.
 
 ---
 
-BLOCK 1 — PRINCIPAL FINDING
-Two or three sentences maximum.
-State the score, the verdict, and the single most material fact that explains both.
-No preamble. No asset name repetition. No rhetorical framing.
+BLOCK 1 — INVESTMENT DECISION
+One line per item. No sentences. No connectives.
 
-EXAMPLE OUTPUT:
-Score: 12/100. Verdict: AVOID. Three floor rules triggered independently (FLOOR-D2-001, FLOOR-D3-001, FLOOR-BO-001), each capping the maximum permissible verdict at CAUTION. The aggregate score then produced AVOID.
+Format exactly:
+Verdict: [VERDICT]
+Score: [X]/100
+Evidence Completeness: [X]/100
+Verdict Confidence: [High|Medium|Low]
+Critical Risks: [number of floor rules triggered]
+Recommended Action: [next action verbatim from engine]
 
----
-
-BLOCK 2 — DIMENSION FINDINGS
-One entry per dimension. Fixed format:
-
-[D-CODE] [Dimension Name]
-Score: X/100 | Weight: X% | Evidence Confidence: High / Medium / Low
-[Two to four declarative sentences. No more.]
-[Data gaps as bullet points prefixed with "Gap:"]
-
-Evidence Confidence:
-- High: key sub-fields retrieved from verified public sources
-- Medium: some fields retrieved, some defaulted
-- Low: most fields defaulted or absent
-
-SENTENCE RULES:
-- State the score. State what drives it. State the investment implication. Stop.
-- One fact per sentence. No connectives.
-- DO NOT explain engine mechanics. The reader assumes the engine works.
-- DO NOT write about floor rule ceilings or verdict arithmetic. State the outcome only.
-- VARY field status labels. Never repeat "Confirmed:" six times on one page.
-  Use across your six dimensions: Retrieved. Verified. Public record. On record. Registry status. Observed. Not verified. Not on public record. Absent from public record. No evidence found.
-- Never use: "Combined with...", "Therefore...", "Independently...", "Meaning...", "Each of which..."
-
-EXAMPLE D6:
-D6 Capital Access Signals
-Score: 0/100 | Weight: 8% | Evidence Confidence: High
-DFI engagement: no evidence found. Vehicle: unlisted. Capital raise activity (36 months): none on public record. Gulf or Western investor linkage: absent.
-
-EXAMPLE D5:
-D5 Infrastructure Readiness
-Score: 5/100 | Weight: 12% | Evidence Confidence: Low
-Power, road, rail and water: not on public record. Port distance: not verified.
-Gap: Infrastructure evidence absent. Score reflects missing evidence, not confirmed deficiency.
-
-EXAMPLE D3:
-D3 Asset Data Quality
-Score: 2/100 | Weight: 20% | Evidence Confidence: Low
-Resource estimate: none on public record. Reserve classification: none. Production data: absent. Stage: exploration.
-Gap: No compliant resource estimate identified.
-Gap: No production history on public record.
-
-EXAMPLE PRINCIPAL FINDING:
-Score: 12/100. Verdict: AVOID. Three independent floor rules were triggered. The asset fails the minimum investment threshold.
-
-EXAMPLE FLOOR RULE STATEMENT (verdict section only):
-Floor rules: FLOOR-D2-001 (Revenue Transparency: 0/100), FLOOR-D3-001 (Asset Data: 2/100), FLOOR-BO-001 (beneficial ownership unresolved). Score: 12/100. Verdict: AVOID.
-
-DO NOT WRITE:
-- "...each caps the maximum permissible verdict at CAUTION..."
-- "...the aggregate score then produced AVOID, which supersedes..."
-- "...this is not a retrieval gap..."
-- "...the distinction matters for any future retrieval effort..."
-- "...combined with a Copperbelt location..."
-- "...meaning no investable basis exists..."
+Verdict Confidence rules:
+- High: verdict driven by confirmed retrieved evidence, not defaults
+- Medium: verdict driven by mix of retrieved evidence and defaults
+- Low: verdict driven primarily by defaults — score may change materially with better retrieval
 
 ---
 
-BLOCK 3 — WHAT THE INVESTOR DOES NOT KNOW
-Three to five findings. Each finding: two sentences maximum.
-Cross-dimension insights only — not visible from individual scores in isolation.
-Cite dimension code and data field. State the finding. State the implication. Stop.
+BLOCK 2 — CRITICAL RISKS
+Only include if floor rules were triggered. Otherwise omit this block entirely.
+One line per floor rule. Format:
 
-EXAMPLE:
-Three independent floor rules triggered (D2: 0/100, D3: 2/100, FLOOR-BO-001). The asset fails the minimum investment threshold on three separate criteria.
+[Rule code]: [one plain sentence stating what failed and why it matters to the investor]
 
-PROHIBITED IN ALL BLOCKS:
-- Em dashes
-- "This means..."
-- "This reflects..."
-- "The distinction matters..."
-- "This is not a..."
-- "It should be noted..."
-- "The combination of..."
-- "Each of which..."
-- "Persist regardless..."
-- "Standalone disqualifying..."
-- "The more conservative outcome..."
-- "Cannot be assumed..."
-- "Would be importing assumptions..."
-- Any sentence that asserts a conclusion not directly supported by a retrieved data field.
+No engine language. No "caps the verdict". No "maximum permissible".
+State what it means for the investor. Example:
+FLOOR-D2-001: Revenue transparency score is zero. Payment flows cannot be traced.
+FLOOR-BO-001: Beneficial ownership is unresolved. AML/KYC compliance cannot be established.
 
-EVIDENCE BOUNDARY — ABSOLUTE:
-Only assert facts present in the data fields provided.
-If a field is a default, say so. Never state a jurisdictional fact (EITI status, Fraser score, WB percentile) as confirmed unless it appears in the evidence with retrieval status RETRIEVED.
+---
+
+BLOCK 3 — INVESTMENT DRIVERS
+Three columns of facts. No essays.
+
+Positive findings (confirmed evidence supporting investment):
+- [fact]. [D-code]
+
+Negative findings (confirmed evidence against investment):
+- [fact]. [D-code]
+
+Unknown (material fields absent from public record):
+- [field or topic not retrieved]. [D-code]
+
+Maximum five items per column. Cite dimension. One line each.
+
+---
+
+BLOCK 4 — EVIDENCE SUMMARY
+One short paragraph. Three sentences maximum.
+State: how many fields were assessed, how many retrieved, how many defaulted.
+State which dimensions have Low evidence confidence and what that means for score reliability.
+Do not explain the methodology. State the facts about this specific assessment.
+
+---
+
+BLOCK 5 — VERDICT AND NEXT ACTION
+Two to four sentences. Decision-first.
+First sentence: verdict and recommended action.
+Remaining sentences: material conditions or risks relevant to that action only.
+No floor rule code numbers in this block. Plain language only.
+
+---
+
+WRITING RULES — ABSOLUTE:
+No em dashes. Use full stops.
+No semicolons for listing. Use full stops.
+No: "This means", "This reflects", "Therefore", "Thus", "Hence", "As such"
+No: "Combined with", "Each of which", "Independently", "Moreover", "Furthermore"
+No: "It should be noted", "It is worth noting", "Importantly"
+No: "Floor rule", "aggregate score", "maximum permissible", "caps the verdict"
+No: "Standalone", "disqualifying condition", "conservative outcome"
+No explanatory sentences about how the engine works.
+UK English. Short declarative sentences. Every word earns its place.
+
+EVIDENCE BOUNDARY:
+Only assert facts present in the provided data fields.
+If a field is defaulted (marked NOT RETRIEVED), say what is absent. Never state it as confirmed fact.
 WRONG: "Zambia is not EITI-compliant."
-RIGHT: "EITI compliance status: not confirmed during retrieval. Default applied."
+RIGHT: "EITI status: not confirmed."
 WRONG: "No institutional investor has assessed this asset."
-RIGHT: "No DFI engagement identified during retrieval."
+RIGHT: "DFI engagement: no evidence found."
 
 ---
 
-BLOCK 4 — VERDICT AND NEXT ACTION
-State the verdict. State the next action. If floor rules triggered, list them and their effect.
-Three to five sentences. No rhetorical framing.
-
-EXAMPLE OUTPUT:
-Verdict: AVOID. Next action: Stand down.
-Floor rules triggered: FLOOR-D2-001 (D2: 0/100, caps verdict at CAUTION), FLOOR-D3-001 (D3: 2/100, caps verdict at CAUTION), FLOOR-BO-001 (beneficial ownership unresolved, caps verdict at CAUTION).
-All three triggered before aggregate scoring. The aggregate score of 12/100 produced AVOID, which supersedes the CAUTION ceiling.
-Methodology: SEAM-M-v1.0. Rules: SEAM-R-v1.0.
-
----
-
-Return your response as a JSON object with exactly these keys:
+Return exactly this JSON. No preamble. No markdown. No explanation:
 {
-  "principal_finding": "...",
+  "investment_decision": {
+    "verdict": "...",
+    "score": 0,
+    "evidence_completeness": 0,
+    "verdict_confidence": "High|Medium|Low",
+    "critical_risks": 0,
+    "recommended_action": "..."
+  },
+  "critical_risks": ["risk 1", "risk 2"],
+  "investment_drivers": {
+    "positive": ["fact (D-code)", "fact (D-code)"],
+    "negative": ["fact (D-code)", "fact (D-code)"],
+    "unknown": ["field absent (D-code)", "field absent (D-code)"]
+  },
+  "evidence_summary": "...",
   "dimension_findings": {
     "D1": {"finding": "...", "evidence_confidence": "High|Medium|Low"},
     "D2": {"finding": "...", "evidence_confidence": "High|Medium|Low"},
@@ -161,25 +139,18 @@ Return your response as a JSON object with exactly these keys:
     "D5": {"finding": "...", "evidence_confidence": "High|Medium|Low"},
     "D6": {"finding": "...", "evidence_confidence": "High|Medium|Low"}
   },
-  "investor_intelligence": ["finding 1", "finding 2", "finding 3"],
   "verdict_section": "..."
-}
+}"""
 
-Return only the JSON object. No preamble. No markdown fences. No explanation."""
-
-
-# ---------------------------------------------------------------------------
-# PROMPT BUILDER
-# ---------------------------------------------------------------------------
 
 def build_prompt(result: ScoringResult, inp: AssetInput) -> str:
 
     dim_summary = []
     for d in result.dimensions:
-        gaps = f" DATA GAPS: {'; '.join(d.data_gaps)}" if d.data_gaps else ""
+        gaps = f" GAPS: {'; '.join(d.data_gaps)}" if d.data_gaps else ""
         adjs = ""
         if d.adjustments:
-            adjs = " ADJUSTMENTS: " + "; ".join(
+            adjs = " ADJ: " + "; ".join(
                 f"{a['reason']} ({'+' if (a['adjustment'] or 0) > 0 else ''}{a['adjustment']}pts)"
                 for a in d.adjustments if a.get('adjustment') is not None
             )
@@ -187,75 +158,98 @@ def build_prompt(result: ScoringResult, inp: AssetInput) -> str:
             f"{d.code} {d.name} (weight {d.weight*100:.0f}%): {d.adjusted_score}/100{adjs}{gaps}"
         )
 
-    floor_rules_text = ""
+    floor_text = ""
     if result.floor_rules_triggered:
-        floor_rules_text = "\nFLOOR RULES TRIGGERED:\n" + "\n".join(
+        floor_text = "\nFLOOR RULES TRIGGERED:\n" + "\n".join(
             f"- {r['code']}: {r['description']}" for r in result.floor_rules_triggered
         )
 
-    def ret(val, name, default_note="default applied"):
+    def rs(val, default_note="default"):
         if val is None:
-            return f"NOT RETRIEVED — {default_note}"
+            return f"NOT RETRIEVED ({default_note})"
         return f"RETRIEVED: {val}"
 
-    def ret_bool(val, confirmed=True):
-        return f"RETRIEVED: {val}" if confirmed else f"DEFAULT: {val}"
+    commodity_ok = inp.commodity and "retrieval required" not in inp.commodity.lower()
+    eiti_status_ok = inp.eiti_implementation_status != "non-implementing"
+    eiti_country_ok = inp.eiti_compliant_country is True
 
-    commodity_retrieved = inp.commodity and "retrieval required" not in inp.commodity.lower()
-    eiti_status_retrieved = inp.eiti_implementation_status != "non-implementing"
-    eiti_country_retrieved = inp.eiti_compliant_country is True
+    total_fields = 19
+    retrieved_count = sum([
+        inp.fraser_investment_attractiveness is not None,
+        inp.wb_rule_of_law_percentile is not None,
+        inp.wb_regulatory_quality_percentile is not None,
+        eiti_status_ok,
+        eiti_country_ok,
+        inp.eiti_payment_disclosure_quality is not None,
+        inp.beneficial_ownership_disclosure != "none",
+        inp.resource_estimate_standard != "none",
+        inp.reserve_classification != "none",
+        inp.production_data_availability != "none",
+        commodity_ok,
+        inp.licence_holder_status != "other",
+        inp.locas_filing_status != "not_filed",
+        inp.power_supply != "none",
+        inp.road_access != "none",
+        inp.water_supply != "none",
+        inp.port_distance_km is not None,
+        inp.active_dfi_engagement != "none",
+        inp.listed_vehicle != "unlisted",
+    ])
+    defaulted_count = total_fields - retrieved_count
 
     return f"""ASSET: {result.asset_name}
 ASSET ID: {result.asset_id}
 JURISDICTION: {inp.jurisdiction} ({inp.jurisdiction_code})
-COMMODITY: {inp.commodity} [{'RETRIEVED' if commodity_retrieved else 'NOT RETRIEVED'}]
+COMMODITY: {inp.commodity} [{'RETRIEVED' if commodity_ok else 'NOT RETRIEVED'}]
 PROVINCE: {inp.province}
-METHODOLOGY: {result.methodology_version}
-RULES: {result.rules_version}
+METHODOLOGY: {result.methodology_version} | RULES: {result.rules_version}
 GENERATED: {result.generated_at}
 
 INVESTMENT READINESS SCORE: {result.investment_readiness_score}/100
+EVIDENCE COMPLETENESS: {result.evidence_completeness_score}/100
 VERDICT: {result.verdict}
 NEXT ACTION: {result.next_action}
+FLOOR RULES TRIGGERED: {len(result.floor_rules_triggered)}
+FIELDS ASSESSED: {total_fields} | RETRIEVED: {retrieved_count} | DEFAULTED: {defaulted_count}
 
 DIMENSION SCORES:
 {chr(10).join(dim_summary)}
-{floor_rules_text}
+{floor_text}
 
-FIELD DATA — retrieval status shown for every field:
+FIELD DATA (RETRIEVED vs NOT RETRIEVED):
 
 D1 Jurisdiction:
-  Fraser Investment Attractiveness Index: {ret(inp.fraser_investment_attractiveness, 'fraser_investment_attractiveness', 'neutral default 50 applied')}
-  WB Rule of Law percentile: {ret(inp.wb_rule_of_law_percentile, 'wb_rule_of_law_percentile', 'conservative default 40 applied')}
-  WB Regulatory Quality percentile: {ret(inp.wb_regulatory_quality_percentile, 'wb_regulatory_quality_percentile', 'conservative default 40 applied')}
-  Regulatory change last 12m: RETRIEVED: {inp.regulatory_change_last_12m}
-  Mining code revision in progress: RETRIEVED: {inp.mining_code_revision_in_progress}
-  Investment arbitration last 5y: RETRIEVED: {inp.investment_arbitration_last_5y}
+  Fraser Investment Attractiveness: {rs(inp.fraser_investment_attractiveness, 'neutral default 50')}
+  WB Rule of Law: {rs(inp.wb_rule_of_law_percentile, 'conservative default 40')}
+  WB Regulatory Quality: {rs(inp.wb_regulatory_quality_percentile, 'conservative default 40')}
+  Regulatory change 12m: RETRIEVED: {inp.regulatory_change_last_12m}
+  Mining code revision: RETRIEVED: {inp.mining_code_revision_in_progress}
+  Investment arbitration 5y: RETRIEVED: {inp.investment_arbitration_last_5y}
   Bilateral Investment Treaty: RETRIEVED: {inp.bilateral_investment_treaty}
-  EITI compliant country: {'RETRIEVED: True' if eiti_country_retrieved else 'NOT RETRIEVED — default False applied'}
+  EITI compliant country: {'RETRIEVED: True' if eiti_country_ok else 'NOT RETRIEVED (default False)'}
 
 D2 Revenue Transparency:
-  EITI implementation status: {'RETRIEVED: ' + inp.eiti_implementation_status if eiti_status_retrieved else 'NOT RETRIEVED — default non-implementing applied'}
-  Beneficial ownership disclosure: RETRIEVED: {inp.beneficial_ownership_disclosure}
-  EITI payment disclosure quality: {ret(inp.eiti_payment_disclosure_quality, 'eiti_payment_disclosure_quality', 'scored as zero')}
+  EITI status: {'RETRIEVED: ' + inp.eiti_implementation_status if eiti_status_ok else 'NOT RETRIEVED (default: non-implementing)'}
+  Beneficial ownership: RETRIEVED: {inp.beneficial_ownership_disclosure}
+  EITI payment quality: {rs(inp.eiti_payment_disclosure_quality, 'scored zero')}
   PEP in ownership chain: RETRIEVED: {inp.pep_in_ownership_chain}
-  FATF grey list jurisdiction: RETRIEVED: {inp.fatf_grey_list_jurisdiction}
-  Payment data gap over 24m: RETRIEVED: {inp.payment_data_gap_over_24m}
+  FATF grey list: RETRIEVED: {inp.fatf_grey_list_jurisdiction}
+  Payment data gap 24m: RETRIEVED: {inp.payment_data_gap_over_24m}
 
 D3 Asset Data:
   Resource estimate standard: RETRIEVED: {inp.resource_estimate_standard}
   Reserve classification: RETRIEVED: {inp.reserve_classification}
-  Production data availability: RETRIEVED: {inp.production_data_availability}
+  Production data: RETRIEVED: {inp.production_data_availability}
   Exploration stage: RETRIEVED: {inp.exploration_stage}
-  Unresolved resource conflict: RETRIEVED: {inp.unresolved_resource_conflict}
-  Estimate by company employee: RETRIEVED: {inp.estimate_by_company_employee}
-  No independent technical report: RETRIEVED: {inp.no_independent_technical_report}
+  Resource conflict: RETRIEVED: {inp.unresolved_resource_conflict}
+  Employee estimate: RETRIEVED: {inp.estimate_by_company_employee}
+  No technical report: RETRIEVED: {inp.no_independent_technical_report}
 
 D4 Local Content:
-  Licence holder status: RETRIEVED: {inp.licence_holder_status}
-  Compliance filing status: RETRIEVED: {inp.locas_filing_status}
-  Local procurement evidence: RETRIEVED: {inp.local_procurement_evidence}
-  Supplier development programme: RETRIEVED: {inp.supplier_development_programme}
+  Licence holder: RETRIEVED: {inp.licence_holder_status}
+  Compliance filing: RETRIEVED: {inp.locas_filing_status}
+  Local procurement: RETRIEVED: {inp.local_procurement_evidence}
+  Supplier development: RETRIEVED: {inp.supplier_development_programme}
   Reserved services non-local: RETRIEVED: {inp.reserved_services_non_local}
 
 D5 Infrastructure:
@@ -263,19 +257,15 @@ D5 Infrastructure:
   Road access: RETRIEVED: {inp.road_access}
   Rail access: RETRIEVED: {inp.rail_access}
   Water supply: RETRIEVED: {inp.water_supply}
-  Port distance km: {ret(inp.port_distance_km, 'port_distance_km', 'conservative default applied')}
-  Lobito Corridor eligible: RETRIEVED: {inp.lobito_corridor_eligible}
+  Port distance: {rs(inp.port_distance_km, 'conservative default')}
+  Lobito Corridor: RETRIEVED: {inp.lobito_corridor_eligible}
 
 D6 Capital Access:
-  Active DFI engagement: RETRIEVED: {inp.active_dfi_engagement}
+  DFI engagement: RETRIEVED: {inp.active_dfi_engagement}
   Listed vehicle: RETRIEVED: {inp.listed_vehicle}
-  Recent capital raise: RETRIEVED: {inp.recent_capital_raise}
-  Gulf/Western investor linked: RETRIEVED: {inp.gulf_western_investor_linked}"""
+  Capital raise: RETRIEVED: {inp.recent_capital_raise}
+  Gulf/Western investor: RETRIEVED: {inp.gulf_western_investor_linked}"""
 
-
-# ---------------------------------------------------------------------------
-# API CALL
-# ---------------------------------------------------------------------------
 
 def _extract_json(text: str) -> str:
     text = text.strip()
@@ -296,7 +286,6 @@ def _extract_json(text: str) -> str:
 
 def call_intelligence_engine(prompt: str) -> dict:
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-
     if not api_key:
         return _mock_intelligence(prompt)
 
@@ -329,16 +318,15 @@ def call_intelligence_engine(prompt: str) -> dict:
             msg = err.get("error", {}).get("message", body)
         except Exception:
             msg = body
-        raise RuntimeError(f"Anthropic API error {e.code}: {msg}") from None
+        raise RuntimeError(f"API error {e.code}: {msg}") from None
 
     text_blocks = [
         block["text"].strip()
         for block in data.get("content", [])
         if block.get("type") == "text" and block.get("text", "").strip()
     ]
-
     if not text_blocks:
-        raise ValueError(f"No text content in Claude response. stop_reason={data.get('stop_reason')}")
+        raise ValueError(f"No text in response. stop_reason={data.get('stop_reason')}")
 
     raw = _extract_json(text_blocks[-1])
     return json.loads(raw)
@@ -346,13 +334,27 @@ def call_intelligence_engine(prompt: str) -> dict:
 
 def _mock_intelligence(prompt: str) -> dict:
     lines = prompt.split("\n")
-    asset = next((l.replace("ASSET:", "").strip() for l in lines if l.startswith("ASSET:")), "Asset")
     score = next((l.replace("INVESTMENT READINESS SCORE:", "").replace("/100","").strip()
                   for l in lines if "INVESTMENT READINESS SCORE:" in l), "N/A")
     verdict = next((l.replace("VERDICT:", "").strip() for l in lines if l.startswith("VERDICT:")), "N/A")
+    action = next((l.replace("NEXT ACTION:", "").strip() for l in lines if l.startswith("NEXT ACTION:")), "")
 
     return {
-        "principal_finding": f"Score: {score}/100. Verdict: {verdict}. [Intelligence layer active in Streamlit deployment.]",
+        "investment_decision": {
+            "verdict": verdict,
+            "score": int(score) if score.isdigit() else 0,
+            "evidence_completeness": 0,
+            "verdict_confidence": "Low",
+            "critical_risks": 0,
+            "recommended_action": action
+        },
+        "critical_risks": [],
+        "investment_drivers": {
+            "positive": ["[Live in Streamlit]"],
+            "negative": ["[Live in Streamlit]"],
+            "unknown": ["[Live in Streamlit]"]
+        },
+        "evidence_summary": "[Live in Streamlit]",
         "dimension_findings": {
             "D1": {"finding": "[Live in Streamlit]", "evidence_confidence": "Low"},
             "D2": {"finding": "[Live in Streamlit]", "evidence_confidence": "Low"},
@@ -361,11 +363,6 @@ def _mock_intelligence(prompt: str) -> dict:
             "D5": {"finding": "[Live in Streamlit]", "evidence_confidence": "Low"},
             "D6": {"finding": "[Live in Streamlit]", "evidence_confidence": "Low"},
         },
-        "investor_intelligence": [
-            "[Live in Streamlit]",
-            "[Live in Streamlit]",
-            "[Live in Streamlit]",
-        ],
         "verdict_section": f"Verdict: {verdict}. [Live in Streamlit]"
     }
 
@@ -373,5 +370,3 @@ def _mock_intelligence(prompt: str) -> dict:
 def generate_intelligence(result: ScoringResult, inp: AssetInput) -> dict:
     prompt = build_prompt(result, inp)
     return call_intelligence_engine(prompt)
-
-
