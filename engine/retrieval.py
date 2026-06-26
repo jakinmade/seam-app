@@ -177,8 +177,17 @@ def _call_claude(api_key: str, payload_dict: dict) -> str:
         method="POST"
     )
 
-    with urllib.request.urlopen(req) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        try:
+            err = json.loads(body)
+            msg = err.get("error", {}).get("message", body)
+        except Exception:
+            msg = body
+        raise RuntimeError(f"Anthropic API error {e.code}: {msg}") from None
 
     # Collect ALL text blocks; take the last non-empty one.
     # After web search tool use, Claude emits tool_use + tool_result blocks
@@ -227,7 +236,13 @@ def retrieve_asset_data(asset_name: str, jurisdiction: str, context: str = "") -
         "messages": [{"role": "user", "content": prompt}]
     }
 
-    raw = _call_claude(api_key, payload)
+    try:
+        raw = _call_claude(api_key, payload)
+    except RuntimeError as e:
+        # API-level error (e.g. out of credits, auth failure) — fall back to mock
+        mock_input = _mock_retrieval(asset_name, jurisdiction)
+        return mock_input, {"mock": True, "api_error": str(e)}
+
     raw = _extract_json_from_text(raw)
 
     # If still not parseable, retry without web search tool
@@ -235,15 +250,19 @@ def retrieve_asset_data(asset_name: str, jurisdiction: str, context: str = "") -
     try:
         retrieved = json.loads(raw)
     except json.JSONDecodeError:
-        payload_no_search = {
-            "model": "claude-sonnet-4-6",
-            "max_tokens": 4000,
-            "system": RETRIEVAL_SYSTEM_PROMPT,
-            "messages": [{"role": "user", "content": prompt}]
-        }
-        raw = _call_claude(api_key, payload_no_search)
-        raw = _extract_json_from_text(raw)
-        retrieved = json.loads(raw)
+        try:
+            payload_no_search = {
+                "model": "claude-sonnet-4-6",
+                "max_tokens": 4000,
+                "system": RETRIEVAL_SYSTEM_PROMPT,
+                "messages": [{"role": "user", "content": prompt}]
+            }
+            raw = _call_claude(api_key, payload_no_search)
+            raw = _extract_json_from_text(raw)
+            retrieved = json.loads(raw)
+        except (RuntimeError, json.JSONDecodeError) as e:
+            mock_input = _mock_retrieval(asset_name, jurisdiction)
+            return mock_input, {"mock": True, "api_error": str(e)}
 
     sources = {
         "sources_consulted": retrieved.pop("sources_consulted", []),
