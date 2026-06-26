@@ -1,0 +1,244 @@
+{
+  "asset_id": "ZMB-001",
+  "asset_name": "Konkola Copper Mines (KCM / CopperTech)",
+  "methodology_version": "SEAM-M-v1.0",
+  "rules_version": "SEAM-R-v1.0",
+  "generated_at": "2026-06-26T15:25:30.835114+00:00",
+  "investment_readiness_score": 61,
+  "verdict": "MONITOR",
+  "dimensions": {
+    "D1": {
+      "name": "Jurisdiction Stability",
+      "weight": 0.25,
+      "adjusted_score": 32.9,
+      "weighted_contribution": 8.225,
+      "sub_scores": {
+        "fraser_institute_score": {
+          "score": 47.3,
+          "weight": 0.5
+        },
+        "wb_rule_of_law": {
+          "score": 36.0,
+          "weight": 0.25
+        },
+        "wb_regulatory_quality": {
+          "score": 41.0,
+          "weight": 0.25
+        }
+      },
+      "adjustments": [
+        {
+          "rule": "D1-ADJ-001 v1.0",
+          "adjustment": -5,
+          "reason": "Regulatory change in past 12 months affecting commodity"
+        },
+        {
+          "rule": "D1-ADJ-002 v1.0",
+          "adjustment": -3,
+          "reason": "Active mining code revision in progress"
+        },
+        {
+          "rule": "D1-ADJ-003 v1.0",
+          "adjustment": -8,
+          "reason": "Investment arbitration against host government in past 5 years"
+        },
+        {
+          "rule": "D1-ADJ-004 v1.0",
+          "adjustment": 3,
+          "reason": "Bilateral Investment Treaty with UK, US or UAE in force"
+        },
+        {
+          "rule": "D1-ADJ-005 v1.0",
+          "adjustment": 3,
+          "reason": "EITI compliant country"
+        }
+      ],
+      "rules_applied": [
+        "D1-FRASER-001 v1.0",
+        "D1-WB-ROL-001 v1.0",
+        "D1-WB-RQ-001 v1.0"
+      ],
+      "data_gaps": []
+    },
+    "D2": {
+      "name": "Revenue Transparency",
+      "weight": 0.2,
+      "adjusted_score": 72.0,
+      "weighted_contribution": 14.4,
+      "sub_scores": {
+        "eiti_implementation_status": {
+          "score": 40.0,
+          "weight": 0.4
+        },
+        "beneficial_ownership_disclosure": {
+          "score": 15.0,
+          "weight": 0.35
+        },
+        "eiti_payment_disclosure_quality": {
+          "score": 68.0,
+          "weight": 0.25
+        }
+      },
+      "adjustments": [],
+      "rules_applied": [
+        "D2-EITI-001 v1.0",
+        "D2-BO-001 v1.0",
+        "D2-PDQ-001 v1.0"
+      ],
+      "data_gaps": []
+    },
+    "D3": {
+      "name": "Asset Data Quality",
+      "weight": 0.2,
+      "adjusted_score": 77.0,
+      "weighted_contribution": 15.4,
+      "sub_scores": {
+        "resource_estimate_standard": {
+          "score": 25.0,
+          "weight": 0.4
+        },
+        "reserve_classification": {
+          "score": 30.0,
+          "weight": 0.3
+        },
+        "production_data_availability": {
+          "score": 20.0,
+          "weight": 0.2
+        },
+        "exploration_stage": {
+          "score": 10.0,
+          "weight": 0.1
+        }
+      },
+      "adjustments": [
+        {
+          "rule": "D3-ADJ-001 v1.0",
+          "adjustment": -8,
+          "reason": "Unresolved conflict between resource estimates \u2014 conservative value applied"
+        }
+      ],
+      "rules_applied": [
+        "D3-RES-001 v1.0",
+        "D3-RC-001 v1.0",
+        "D3-PD-001 v1.0",
+        "D3-ES-001 v1.0"
+      ],
+      "data_gaps": []
+    },
+    "D4": {
+      "name": "Local Content Compliance Posture",
+      "weight": 0.15,
+      "adjusted_score": 82.0,
+      "weighted_contribution": 12.3,
+      "sub_scores": {
+        "licence_holder_status": {
+          "score": 35.0,
+          "weight": 0.35,
+          "regime_citizen_threshold_pct": 50.1,
+          "regime_empowered_min_pct": 25.0
+        },
+        "compliance_filing_status": {
+          "score": 30.0,
+          "weight": 0.3,
+          "compliance_portal": "LOCAS (Zambia MRC)",
+          "filing_frequency": "Quarterly"
+        },
+        "local_procurement_evidence": {
+          "score": 10.0,
+          "weight": 0.2,
+          "regime_procurement_target_pct": 20.0
+        },
+        "supplier_development_programme": {
+          "score": 7.0,
+          "weight": 0.15
+        }
+      },
+      "adjustments": [],
+      "rules_applied": [
+        "D4-REGIME-ZMB v1.0 | SI No. 68 of 2025 \u2014 Geological and Minerals Development (Local Content) Regulations",
+        "D4-LH-001 v1.0",
+        "D4-FILING-001 v1.0",
+        "D4-LP-001 v1.0",
+        "D4-SDP-001 v1.0"
+      ],
+      "data_gaps": []
+    },
+    "D5": {
+      "name": "Infrastructure Readiness",
+      "weight": 0.12,
+      "adjusted_score": 77.0,
+      "weighted_contribution": 9.24,
+      "sub_scores": {
+        "power_supply": {
+          "score": 20.0,
+          "weight": 0.3
+        },
+        "road_access": {
+          "score": 20.0,
+          "weight": 0.2
+        },
+        "rail_access": {
+          "score": 17.0,
+          "weight": 0.2
+        },
+        "water_supply": {
+          "score": 15.0,
+          "weight": 0.15
+        },
+        "port_distance": {
+          "score": 5.0,
+          "weight": 0.15
+        }
+      },
+      "adjustments": [
+        {
+          "rule": "D5-LOBITO-001 v1.0",
+          "adjustment": 5,
+          "reason": "Lobito Corridor eligibility adjustment (NW/Copperbelt province)"
+        }
+      ],
+      "rules_applied": [
+        "D5-PWR-001 v1.0",
+        "D5-ROAD-001 v1.0",
+        "D5-RAIL-001 v1.0",
+        "D5-WATER-001 v1.0",
+        "D5-PORT-001 v1.0"
+      ],
+      "data_gaps": []
+    },
+    "D6": {
+      "name": "Capital Access Signals",
+      "weight": 0.08,
+      "adjusted_score": 20.0,
+      "weighted_contribution": 1.6,
+      "sub_scores": {
+        "active_dfi_engagement": {
+          "score": 20.0,
+          "weight": 0.4
+        },
+        "listed_vehicle": {
+          "score": 0.0,
+          "weight": 0.3
+        },
+        "recent_capital_raise": {
+          "score": 0.0,
+          "weight": 0.2
+        },
+        "gulf_western_investor": {
+          "score": 0.0,
+          "weight": 0.1
+        }
+      },
+      "adjustments": [],
+      "rules_applied": [
+        "D6-DFI-001 v1.0",
+        "D6-LV-001 v1.0",
+        "D6-CR-001 v1.0",
+        "D6-GW-001 v1.0"
+      ],
+      "data_gaps": []
+    }
+  },
+  "floor_rules_triggered": [],
+  "data_gaps_summary": []
+}
