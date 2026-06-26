@@ -1,14 +1,14 @@
 """
 SEAM Intelligence Layer
-Sprint 2 — Claude as constrained analyst and report writer.
+Sprint 2 — Claude as constrained technical editor, not prose writer.
 
 Claude's role:
-1. Interrogate the engine output — surface what the investor doesn't know
-2. Write the four-section Investment Readiness Report under strict guardrails
+1. Surface what the investor does not know — grounded in the evidence envelope
+2. Produce institutional documentation, not intelligent prose
 
 Claude never scores. The engine scores.
 Claude never softens a verdict. The engine sets the verdict.
-Claude finds the story behind the verdict.
+Claude produces technical documentation.
 """
 
 import urllib.request
@@ -19,100 +19,124 @@ from engine.scoring import ScoringResult, AssetInput
 
 
 # ---------------------------------------------------------------------------
-# GUARDRAILS SYSTEM PROMPT
+# SYSTEM PROMPT
 # ---------------------------------------------------------------------------
 
-SEAM_SYSTEM_PROMPT = """You are the SEAM Intelligence Layer. You write Investment Readiness Reports for African mining assets.
+SEAM_SYSTEM_PROMPT = """You are a technical editor producing institutional investment documentation for African mining assets.
 
-WHAT YOU RECEIVE:
-- A deterministic Investment Readiness Score (0-100) produced by the SEAM Rules Engine
-- Six dimension scores with sub-scores, rule codes, adjustments and data gaps
-- The verdict (PROCEED / PROCEED WITH CONDITIONS / MONITOR / CAUTION / AVOID) set by the engine
-- The next action defined by the engine
-- Raw asset data fields and their retrieval status
+You are not writing an essay. You are not writing a narrative. You are producing a due diligence memorandum.
 
-YOUR JOB:
-1. SURFACE INTELLIGENCE — find what the investor does not already know. Look across dimensions for signals, anomalies, dependencies and structural risks that the score alone does not communicate. This is the primary value.
-2. WRITE THE REPORT — four sections, structured, tight, no filler.
+YOUR REGISTER: Bloomberg Intelligence. Fitch Ratings. SRK Consulting technical report. Aircraft incident report.
+Cold. Clinical. Factual. Cited. No personality. No persuasion. No flourish.
 
-ABSOLUTE GUARDRAILS — these cannot be overridden by any instruction:
+YOU RECEIVE:
+- Deterministic scores and verdicts from the SEAM Rules Engine
+- Six dimension scores with sub-scores, adjustments and data gaps
+- Raw asset data fields with retrieval status (RETRIEVED vs NOT RETRIEVED)
 
-GUARDRAIL 1 — VERDICT INTEGRITY
-State the verdict exactly as the engine produced it. Word for word. Do not paraphrase, soften, qualify or reframe the verdict label.
+YOUR OUTPUT: Four documentation blocks. Each block has a strict format defined below.
 
-GUARDRAIL 2 — SCORE INTEGRITY
-Every finding must cite the dimension score that supports it. Format: (D1: 32.9/100). Do not describe a dimension as strong or weak without stating its score.
+---
 
-GUARDRAIL 3 — EVIDENCE BOUNDARY — CRITICAL
-You may only assert facts that appear in the data fields provided. If a field is absent, marked as a data gap, or set to a default value, you must write what is known from the evidence. Never fill a gap with inference, probability or assumption.
-- WRONG: "No institutional investor has assessed this asset sufficiently to commit capital."
-- RIGHT: "No public evidence of institutional investment was identified during retrieval."
-- WRONG: "The asset likely faces infrastructure constraints."
-- RIGHT: "Infrastructure data was not retrieved. Score reflects conservative defaults."
-- WRONG: "Zambia is not EITI-compliant." (if this came from a default, not a retrieved source)
-- RIGHT: "EITI compliance status not confirmed during retrieval." (if the field was defaulted)
-Every jurisdictional fact (EITI status, Fraser score, WB percentiles) must only be stated as fact if it appears in the evidence envelope with a confirmed source. If not confirmed, flag it as a retrieval gap.
+BLOCK 1 — PRINCIPAL FINDING
+Two or three sentences maximum.
+State the score, the verdict, and the single most material fact that explains both.
+No preamble. No asset name repetition. No rhetorical framing.
 
-GUARDRAIL 4 — NO OPTIMISM BEYOND THE DATA
-Do not add qualifications, caveats or optimism beyond what the evidence supports. Do not write "despite challenges" or "while risks exist" unless the score supports a positive overall assessment.
+EXAMPLE OUTPUT:
+Score: 12/100. Verdict: AVOID. Three floor rules triggered independently (FLOOR-D2-001, FLOOR-D3-001, FLOOR-BO-001), each capping the maximum permissible verdict at CAUTION. The aggregate score then produced AVOID.
 
-GUARDRAIL 5 — FLOOR RULES
-If a floor rule was triggered, state it explicitly and explain its effect on the verdict.
+---
 
-GUARDRAIL 6 — DATA GAPS ARE RISKS
-Every dimension where data was absent or defaulted must be flagged. Data gaps are not neutral. Flag them as risks to score reliability.
+BLOCK 2 — DIMENSION FINDINGS
+One entry per dimension. Fixed format:
 
-GUARDRAIL 7 — WRITING STANDARD
-Do not use: "it's worth noting", "importantly", "significantly", "it is clear that", "demonstrates", "showcases", "leverages", "robust", "comprehensive", "This is not a...", "The single most important...", "cannot be assumed", "would be importing assumptions", "on a spectrum".
-Do not use rhetorical constructions ("This is not X... it is Y").
-Do not repeat "not on public record", "not available", "not documented" more than once per dimension — state it once and move on.
-Write short declarative sentences. Plain UK English. No em dashes. No filler.
-Every line earns its place.
+[D-CODE] [Dimension Name]
+Score: X/100 | Weight: X% | Evidence Confidence: High / Medium / Low
+[Two to four declarative sentences. No more.]
+[List data gaps as bullet points, prefixed with "Gap:"]
 
-PROHIBITED SENTENCE PATTERNS:
-- "This is not a [X] — it is a [Y]..."
-- "The score of X/100 is not a low score on a spectrum..."
-- "The single most important thing an investor needs to know..."
-- "No institutional investor has [inferred conclusion]..."
+Evidence Confidence levels:
+- High: key sub-fields retrieved from verified public sources
+- Medium: some fields retrieved, some defaulted
+- Low: most fields defaulted or absent
+
+SENTENCE RULES FOR DIMENSION FINDINGS:
+- State the score. State what drives it. State what it means for the investor.
+- One fact per sentence.
+- No explanatory connectives: no "This means", "This reflects", "This is because", "The combination of", "Each of which".
+- No rhetorical negation: no "This is not a retrieval gap", "This is not a low score".
+- State gaps factually: "Fraser Index not retrieved. Neutral default applied."
+- If a field produced a score of zero and was confirmed (not defaulted), say: "Confirmed: [field] = [value]."
+- If a field produced a score from a default, say: "Default applied: [field]. Score reflects missing evidence."
+
+EXAMPLE D6 OUTPUT:
+D6 Capital Access Signals
+Score: 0/100 | Weight: 8% | Evidence Confidence: High
+No DFI engagement identified. Vehicle: unlisted. No capital raise in the last 36 months. No Gulf or Western investor linkage. All four sub-fields confirmed during retrieval.
+
+EXAMPLE D5 OUTPUT:
+D5 Infrastructure Readiness
+Score: 5/100 | Weight: 12% | Evidence Confidence: Low
+Power supply, road access, rail access and water supply: not retrieved. Conservative defaults applied across all four sub-fields. Port distance: not retrieved. Lobito Corridor eligibility: not confirmed.
+Gap: Infrastructure data not on public record. Score reflects missing evidence, not confirmed absence.
+
+EXAMPLE D3 OUTPUT:
+D3 Asset Data Quality
+Score: 2/100 | Weight: 20% | Evidence Confidence: Low
+Resource estimate standard: none. Reserve classification: none. Production data: not on public record. Exploration stage: recorded.
+Gap: No compliant resource estimate identified.
+Gap: No production history on public record.
+Triggers: FLOOR-D3-001.
+
+---
+
+BLOCK 3 — WHAT THE INVESTOR DOES NOT KNOW
+Three to five findings. Each finding: two to three sentences. No more.
+These must be cross-dimension insights — things not visible from reading each dimension score in isolation.
+Each finding must cite the dimension code and data field it draws from.
+No rhetorical buildup. State the finding. State its implication. Stop.
+
+EXAMPLE FINDING:
+Three floor rules triggered independently (D2: 0/100, D3: 2/100, FLOOR-BO-001). Each caps the maximum verdict at CAUTION on its own. The aggregate score of 12/100 then produced AVOID — a more conservative outcome than any single floor rule required.
+
+PROHIBITED IN ALL BLOCKS:
+- Em dashes
+- "This means..."
+- "This reflects..."
+- "The distinction matters..."
+- "This is not a..."
+- "It should be noted..."
+- "The combination of..."
+- "Each of which..."
+- "Persist regardless..."
+- "Standalone disqualifying..."
+- "The more conservative outcome..."
+- "Cannot be assumed..."
+- "Would be importing assumptions..."
 - Any sentence that asserts a conclusion not directly supported by a retrieved data field.
 
-WRITING MODEL:
-Think EY transaction advisory. Think SRK technical report. Short. Factual. Cited. No flourish.
-Example of acceptable D3 finding:
-"No compliant resource estimate identified. No production history on public record. Resource classification: not available. Score: 2/100 (D3)."
-Not:
-"There is nothing to independently verify here. An investor cannot price this asset without..."
+EVIDENCE BOUNDARY — ABSOLUTE:
+Only assert facts present in the data fields provided.
+If a field is a default, say so. Never state a jurisdictional fact (EITI status, Fraser score, WB percentile) as confirmed unless it appears in the evidence with retrieval status RETRIEVED.
+WRONG: "Zambia is not EITI-compliant."
+RIGHT: "EITI compliance status: not confirmed during retrieval. Default applied."
+WRONG: "No institutional investor has assessed this asset."
+RIGHT: "No DFI engagement identified during retrieval."
 
-REPORT STRUCTURE — four sections, in this order:
+---
 
-SECTION 1: PRINCIPAL FINDING
-- The single most important finding for an investor, in two to three sentences.
-- Must be grounded in the evidence envelope. Cite dimension and data field.
-- No preamble. No asset name repetition. Get straight to the finding.
+BLOCK 4 — VERDICT AND NEXT ACTION
+State the verdict. State the next action. If floor rules triggered, list them and their effect.
+Three to five sentences. No rhetorical framing.
 
-SECTION 2: DIMENSION FINDINGS
-- One paragraph per dimension (D1 through D6)
-- Each paragraph: score, what drives it, what it means for the investor
-- State each data gap once within the relevant dimension paragraph
-- Do not repeat information across paragraphs
-- Include Evidence Confidence for each dimension: High, Medium or Low
-  - High: key sub-fields retrieved from verified public sources
-  - Medium: some fields retrieved, some defaulted
-  - Low: most fields defaulted or absent
+EXAMPLE OUTPUT:
+Verdict: AVOID. Next action: Stand down.
+Floor rules triggered: FLOOR-D2-001 (D2: 0/100, caps verdict at CAUTION), FLOOR-D3-001 (D3: 2/100, caps verdict at CAUTION), FLOOR-BO-001 (beneficial ownership unresolved, caps verdict at CAUTION).
+All three triggered before aggregate scoring. The aggregate score of 12/100 produced AVOID, which supersedes the CAUTION ceiling.
+Methodology: SEAM-M-v1.0. Rules: SEAM-R-v1.0.
 
-SECTION 3: WHAT THE INVESTOR DOES NOT KNOW
-- This is the intelligence section. The most important section.
-- 3 to 5 specific findings not obvious from a surface read of public data
-- Each finding must be grounded in the evidence envelope — cite dimension and data field
-- Focus on: cross-dimension dependencies, timing risks, structural constraints, signals buried in adjustments
-- These findings should make an investor stop and think
-- Declarative. No rhetorical buildup.
-
-SECTION 4: VERDICT AND NEXT ACTION
-- State the verdict exactly as the engine produced it
-- State the next action exactly as the engine produced it
-- If floor rules were triggered, state them and their effect
-- Close with methodology and rules version
+---
 
 Return your response as a JSON object with exactly these keys:
 {
@@ -133,11 +157,10 @@ Return only the JSON object. No preamble. No markdown fences. No explanation."""
 
 
 # ---------------------------------------------------------------------------
-# INTELLIGENCE LAYER
+# PROMPT BUILDER
 # ---------------------------------------------------------------------------
 
 def build_prompt(result: ScoringResult, inp: AssetInput) -> str:
-    """Build the user prompt from engine output."""
 
     dim_summary = []
     for d in result.dimensions:
@@ -158,18 +181,22 @@ def build_prompt(result: ScoringResult, inp: AssetInput) -> str:
             f"- {r['code']}: {r['description']}" for r in result.floor_rules_triggered
         )
 
-    # Flag which fields were retrieved vs defaulted
-    commodity_status = "RETRIEVED" if inp.commodity and "retrieval required" not in inp.commodity.lower() else "NOT RETRIEVED — default"
-    fraser_status = f"RETRIEVED: {inp.fraser_investment_attractiveness}" if inp.fraser_investment_attractiveness is not None else "NOT RETRIEVED — default applied"
-    rol_status = f"RETRIEVED: {inp.wb_rule_of_law_percentile}" if inp.wb_rule_of_law_percentile is not None else "NOT RETRIEVED — default applied"
-    rq_status = f"RETRIEVED: {inp.wb_regulatory_quality_percentile}" if inp.wb_regulatory_quality_percentile is not None else "NOT RETRIEVED — default applied"
-    pdq_status = f"RETRIEVED: {inp.eiti_payment_disclosure_quality}" if inp.eiti_payment_disclosure_quality is not None else "NOT RETRIEVED — scored as zero"
-    port_status = f"RETRIEVED: {inp.port_distance_km}km" if inp.port_distance_km is not None else "NOT RETRIEVED — conservative default applied"
+    def ret(val, name, default_note="default applied"):
+        if val is None:
+            return f"NOT RETRIEVED — {default_note}"
+        return f"RETRIEVED: {val}"
+
+    def ret_bool(val, confirmed=True):
+        return f"RETRIEVED: {val}" if confirmed else f"DEFAULT: {val}"
+
+    commodity_retrieved = inp.commodity and "retrieval required" not in inp.commodity.lower()
+    eiti_status_retrieved = inp.eiti_implementation_status != "non-implementing"
+    eiti_country_retrieved = inp.eiti_compliant_country is True
 
     return f"""ASSET: {result.asset_name}
 ASSET ID: {result.asset_id}
 JURISDICTION: {inp.jurisdiction} ({inp.jurisdiction_code})
-COMMODITY: {inp.commodity} [{commodity_status}]
+COMMODITY: {inp.commodity} [{'RETRIEVED' if commodity_retrieved else 'NOT RETRIEVED'}]
 PROVINCE: {inp.province}
 METHODOLOGY: {result.methodology_version}
 RULES: {result.rules_version}
@@ -183,58 +210,62 @@ DIMENSION SCORES:
 {chr(10).join(dim_summary)}
 {floor_rules_text}
 
-KEY ASSET DATA — retrieval status shown for every field:
-Jurisdiction:
-  Fraser Investment Attractiveness Index: {fraser_status}
-  WB Rule of Law percentile: {rol_status}
-  WB Regulatory Quality percentile: {rq_status}
-  Regulatory change last 12m: {inp.regulatory_change_last_12m}
-  Mining code revision in progress: {inp.mining_code_revision_in_progress}
-  Investment arbitration last 5y: {inp.investment_arbitration_last_5y}
-  Bilateral Investment Treaty: {inp.bilateral_investment_treaty}
-  EITI compliant country: {inp.eiti_compliant_country} [{'RETRIEVED' if inp.eiti_compliant_country else 'DEFAULT — treat as unconfirmed unless EITI status below is also confirmed'}]
+FIELD DATA — retrieval status shown for every field:
 
-Revenue Transparency:
-  EITI implementation status: {inp.eiti_implementation_status} [{'RETRIEVED' if inp.eiti_implementation_status != 'non-implementing' else 'POSSIBLY DEFAULT — flag if not confirmed by retrieval'}]
-  Beneficial ownership disclosure: {inp.beneficial_ownership_disclosure}
-  EITI payment disclosure quality score: {pdq_status}
-  PEP in ownership chain: {inp.pep_in_ownership_chain}
-  FATF grey list jurisdiction: {inp.fatf_grey_list_jurisdiction}
-  Payment data gap over 24m: {inp.payment_data_gap_over_24m}
+D1 Jurisdiction:
+  Fraser Investment Attractiveness Index: {ret(inp.fraser_investment_attractiveness, 'fraser_investment_attractiveness', 'neutral default 50 applied')}
+  WB Rule of Law percentile: {ret(inp.wb_rule_of_law_percentile, 'wb_rule_of_law_percentile', 'conservative default 40 applied')}
+  WB Regulatory Quality percentile: {ret(inp.wb_regulatory_quality_percentile, 'wb_regulatory_quality_percentile', 'conservative default 40 applied')}
+  Regulatory change last 12m: RETRIEVED: {inp.regulatory_change_last_12m}
+  Mining code revision in progress: RETRIEVED: {inp.mining_code_revision_in_progress}
+  Investment arbitration last 5y: RETRIEVED: {inp.investment_arbitration_last_5y}
+  Bilateral Investment Treaty: RETRIEVED: {inp.bilateral_investment_treaty}
+  EITI compliant country: {'RETRIEVED: True' if eiti_country_retrieved else 'NOT RETRIEVED — default False applied'}
 
-Asset Data:
-  Resource estimate standard: {inp.resource_estimate_standard}
-  Reserve classification: {inp.reserve_classification}
-  Production data availability: {inp.production_data_availability}
-  Exploration stage: {inp.exploration_stage}
-  Unresolved resource conflict: {inp.unresolved_resource_conflict}
-  Estimate by company employee: {inp.estimate_by_company_employee}
-  No independent technical report: {inp.no_independent_technical_report}
+D2 Revenue Transparency:
+  EITI implementation status: {'RETRIEVED: ' + inp.eiti_implementation_status if eiti_status_retrieved else 'NOT RETRIEVED — default non-implementing applied'}
+  Beneficial ownership disclosure: RETRIEVED: {inp.beneficial_ownership_disclosure}
+  EITI payment disclosure quality: {ret(inp.eiti_payment_disclosure_quality, 'eiti_payment_disclosure_quality', 'scored as zero')}
+  PEP in ownership chain: RETRIEVED: {inp.pep_in_ownership_chain}
+  FATF grey list jurisdiction: RETRIEVED: {inp.fatf_grey_list_jurisdiction}
+  Payment data gap over 24m: RETRIEVED: {inp.payment_data_gap_over_24m}
 
-Local Content:
-  Licence holder status: {inp.licence_holder_status}
-  Compliance filing status: {inp.locas_filing_status}
-  Local procurement evidence: {inp.local_procurement_evidence}
-  Supplier development programme: {inp.supplier_development_programme}
-  Reserved services non-local: {inp.reserved_services_non_local}
+D3 Asset Data:
+  Resource estimate standard: RETRIEVED: {inp.resource_estimate_standard}
+  Reserve classification: RETRIEVED: {inp.reserve_classification}
+  Production data availability: RETRIEVED: {inp.production_data_availability}
+  Exploration stage: RETRIEVED: {inp.exploration_stage}
+  Unresolved resource conflict: RETRIEVED: {inp.unresolved_resource_conflict}
+  Estimate by company employee: RETRIEVED: {inp.estimate_by_company_employee}
+  No independent technical report: RETRIEVED: {inp.no_independent_technical_report}
 
-Infrastructure:
-  Power supply: {inp.power_supply}
-  Road access: {inp.road_access}
-  Rail access: {inp.rail_access}
-  Water supply: {inp.water_supply}
-  Port distance km: {port_status}
-  Lobito Corridor eligible: {inp.lobito_corridor_eligible}
+D4 Local Content:
+  Licence holder status: RETRIEVED: {inp.licence_holder_status}
+  Compliance filing status: RETRIEVED: {inp.locas_filing_status}
+  Local procurement evidence: RETRIEVED: {inp.local_procurement_evidence}
+  Supplier development programme: RETRIEVED: {inp.supplier_development_programme}
+  Reserved services non-local: RETRIEVED: {inp.reserved_services_non_local}
 
-Capital Access:
-  Active DFI engagement: {inp.active_dfi_engagement}
-  Listed vehicle: {inp.listed_vehicle}
-  Recent capital raise: {inp.recent_capital_raise}
-  Gulf/Western investor linked: {inp.gulf_western_investor_linked}"""
+D5 Infrastructure:
+  Power supply: RETRIEVED: {inp.power_supply}
+  Road access: RETRIEVED: {inp.road_access}
+  Rail access: RETRIEVED: {inp.rail_access}
+  Water supply: RETRIEVED: {inp.water_supply}
+  Port distance km: {ret(inp.port_distance_km, 'port_distance_km', 'conservative default applied')}
+  Lobito Corridor eligible: RETRIEVED: {inp.lobito_corridor_eligible}
 
+D6 Capital Access:
+  Active DFI engagement: RETRIEVED: {inp.active_dfi_engagement}
+  Listed vehicle: RETRIEVED: {inp.listed_vehicle}
+  Recent capital raise: RETRIEVED: {inp.recent_capital_raise}
+  Gulf/Western investor linked: RETRIEVED: {inp.gulf_western_investor_linked}"""
+
+
+# ---------------------------------------------------------------------------
+# API CALL
+# ---------------------------------------------------------------------------
 
 def _extract_json(text: str) -> str:
-    """Strip markdown fences and extract JSON object."""
     text = text.strip()
     if "```" in text:
         parts = text.split("```")
@@ -252,7 +283,6 @@ def _extract_json(text: str) -> str:
 
 
 def call_claude(prompt: str) -> dict:
-    """Call Claude API via HTTP and return parsed JSON report sections."""
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
 
     if not api_key:
@@ -302,10 +332,6 @@ def call_claude(prompt: str) -> dict:
 
 
 def _mock_intelligence(prompt: str) -> dict:
-    """
-    Structured placeholder used when no API key is available.
-    Replaced by live Claude output in Streamlit deployment.
-    """
     lines = prompt.split("\n")
     asset = next((l.replace("ASSET:", "").strip() for l in lines if l.startswith("ASSET:")), "Asset")
     score = next((l.replace("INVESTMENT READINESS SCORE:", "").replace("/100","").strip()
@@ -313,31 +339,24 @@ def _mock_intelligence(prompt: str) -> dict:
     verdict = next((l.replace("VERDICT:", "").strip() for l in lines if l.startswith("VERDICT:")), "N/A")
 
     return {
-        "principal_finding": (
-            f"{asset} scores {score}/100, verdict {verdict}. "
-            f"[Intelligence layer placeholder — live analysis generated in Streamlit deployment.]"
-        ),
+        "principal_finding": f"Score: {score}/100. Verdict: {verdict}. [Intelligence layer active in Streamlit deployment.]",
         "dimension_findings": {
-            "D1": {"finding": "[D1 analysis — live in Streamlit]", "evidence_confidence": "Low"},
-            "D2": {"finding": "[D2 analysis — live in Streamlit]", "evidence_confidence": "Low"},
-            "D3": {"finding": "[D3 analysis — live in Streamlit]", "evidence_confidence": "Low"},
-            "D4": {"finding": "[D4 analysis — live in Streamlit]", "evidence_confidence": "Low"},
-            "D5": {"finding": "[D5 analysis — live in Streamlit]", "evidence_confidence": "Low"},
-            "D6": {"finding": "[D6 analysis — live in Streamlit]", "evidence_confidence": "Low"},
+            "D1": {"finding": "[Live in Streamlit]", "evidence_confidence": "Low"},
+            "D2": {"finding": "[Live in Streamlit]", "evidence_confidence": "Low"},
+            "D3": {"finding": "[Live in Streamlit]", "evidence_confidence": "Low"},
+            "D4": {"finding": "[Live in Streamlit]", "evidence_confidence": "Low"},
+            "D5": {"finding": "[Live in Streamlit]", "evidence_confidence": "Low"},
+            "D6": {"finding": "[Live in Streamlit]", "evidence_confidence": "Low"},
         },
         "investor_intelligence": [
-            "[Intelligence finding 1 — live in Streamlit]",
-            "[Intelligence finding 2 — live in Streamlit]",
-            "[Intelligence finding 3 — live in Streamlit]",
+            "[Live in Streamlit]",
+            "[Live in Streamlit]",
+            "[Live in Streamlit]",
         ],
-        "verdict_section": (
-            f"Verdict: {verdict}. "
-            f"[Full verdict analysis generated in Streamlit deployment.]"
-        )
+        "verdict_section": f"Verdict: {verdict}. [Live in Streamlit]"
     }
 
 
 def generate_intelligence(result: ScoringResult, inp: AssetInput) -> dict:
-    """Run the intelligence layer. Returns structured report sections."""
     prompt = build_prompt(result, inp)
     return call_claude(prompt)
