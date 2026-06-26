@@ -328,7 +328,10 @@ if page == "Assessment":
                     st.write("EITI, Fraser Institute, World Bank WGI, exchange filings, cadastre...")
                     asset_input, sources_meta = retrieve_asset_data(asset_name_input, jurisdiction_input, context_input)
                     if sources_meta.get("mock"):
-                        st.write("Live retrieval active in deployed app with ANTHROPIC_API_KEY.")
+                        if sources_meta.get("api_error"):
+                            st.warning(f"Live data retrieval unavailable: {sources_meta['api_error']}. Showing conservative defaults — score is indicative only.")
+                        else:
+                            st.write("Live retrieval active in deployed app with ANTHROPIC_API_KEY.")
                     s.update(label="Data retrieved.", state="complete")
 
             # STEP 2 — Score
@@ -519,3 +522,4 @@ They do not constitute due diligence and are not a substitute for independent te
 Every investor must conduct their own assessment appropriate to their mandate, jurisdiction and risk appetite.
 Methodology SEAM-M-v1.0 | Rules SEAM-R-v1.0 | akinmade.co.uk | CONFIDENTIAL
 </div>""", unsafe_allow_html=True)
+
