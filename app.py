@@ -2,7 +2,7 @@
 SEAM — Structured Evidence for African Mining
 Streamlit App  |  Sprints 4-5-6
 
-Sprint 4: Polish + Stripe payment gate + PDF download
+Sprint 4: Polish + PDF download on completion
 Sprint 5: SEAM Watch — diff evidence envelopes, flag material changes
 Sprint 6: Free snippet — D1/D2/D3 + cited sources, full report gated
 """
@@ -34,8 +34,6 @@ st.set_page_config(
 
 AMBER  = "#C8962E"
 NAVY   = "#0B1929"
-REPORT_PRICE_GBP = 750
-
 VERDICT_COLOUR = {
     "PROCEED":                  "#1A7A3A",
     "PROCEED WITH CONDITIONS":  "#B8860B",
@@ -140,7 +138,6 @@ if "watch_list"   not in st.session_state: st.session_state.watch_list = {}
 if "last_result"  not in st.session_state: st.session_state.last_result = None
 if "last_intel"   not in st.session_state: st.session_state.last_intel = None
 if "last_input"   not in st.session_state: st.session_state.last_input = None
-if "paid"         not in st.session_state: st.session_state.paid = False
 if "report_ready" not in st.session_state: st.session_state.report_ready = False
 if "pdf_path"     not in st.session_state: st.session_state.pdf_path = None
 if "snippet"      not in st.session_state: st.session_state.snippet = None
@@ -263,58 +260,6 @@ def render_watch_alert(alert, asset_name):
     </div>""", unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
-# STRIPE
-# ---------------------------------------------------------------------------
-
-def stripe_checkout(result, inp) -> bool:
-    """
-    Create Stripe checkout session and return pay button.
-    Returns True if payment already confirmed in session state.
-    """
-    if st.session_state.paid:
-        return True
-
-    stripe_key = st.secrets.get("STRIPE_SECRET_KEY","")
-    price_id   = st.secrets.get("STRIPE_PRICE_ID","")
-
-    if not stripe_key or not price_id:
-        # Dev mode — bypass payment
-        st.info("Payment gateway not configured. In production, Stripe checkout appears here.")
-        if st.button("Simulate payment (dev mode)"):
-            st.session_state.paid = True
-            st.rerun()
-        return False
-
-    import stripe as stripe_lib
-    stripe_lib.api_key = stripe_key
-
-    try:
-        session = stripe_lib.checkout.Session.create(
-            payment_method_types=["card"],
-            line_items=[{"price": price_id, "quantity": 1}],
-            mode="payment",
-            success_url=st.secrets.get("APP_URL","http://localhost:8501") + "?paid=true&asset=" + result.asset_id,
-            cancel_url=st.secrets.get("APP_URL","http://localhost:8501"),
-            metadata={"asset_id": result.asset_id, "asset_name": result.asset_name}
-        )
-        st.markdown(
-            f'<a href="{session.url}" target="_blank" '
-            f'style="background:{AMBER};color:white;padding:11px 28px;border-radius:4px;'
-            f'text-decoration:none;font-weight:600;font-size:14px;display:inline-block;">'
-            f'Purchase Full Report — £{REPORT_PRICE_GBP}</a>',
-            unsafe_allow_html=True
-        )
-    except Exception as e:
-        st.error(f"Stripe error: {e}")
-
-    return False
-
-# Check URL params for post-payment redirect
-qp = st.query_params
-if qp.get("paid") == "true":
-    st.session_state.paid = True
-
-# ---------------------------------------------------------------------------
 # HEADER
 # ---------------------------------------------------------------------------
 
@@ -368,8 +313,6 @@ if page == "Assessment":
             st.error("Enter an asset name.")
             st.stop()
 
-        # Reset paid state for new run
-        st.session_state.paid = False
         st.session_state.report_ready = False
         st.session_state.pdf_path = None
 
@@ -443,61 +386,51 @@ if page == "Assessment":
                 st.markdown(f"[{src.get('name','')}]({src.get('url','#')})")
 
         st.markdown("---")
+        # ── FULL REPORT ───────────────────────────────────────────────
+        render_banner(result.investment_readiness_score, result.verdict)
 
-        # ── PAYMENT GATE ─────────────────────────────────────────────────────
-        st.markdown("#### Full Investment Readiness Report")
-        st.caption("Aggregate score, verdict, all six dimensions, investor intelligence and Evidence Envelope.")
+        tab1, tab2, tab3, tab4 = st.tabs([
+            "Executive Summary", "Dimension Findings",
+            "What the Investor Does Not Know", "Verdict & Next Action"
+        ])
 
-        paid = stripe_checkout(result, asset_input)
+        with tab1:
+            st.markdown(intel.get("executive_summary",""))
+            cert_block(result)
 
-        if paid:
-            # ── FULL REPORT ───────────────────────────────────────────────
-            render_banner(result.investment_readiness_score, result.verdict)
+        with tab2:
+            render_dims(result.dimensions, intel.get("dimension_findings", {}))
 
-            tab1, tab2, tab3, tab4 = st.tabs([
-                "Executive Summary", "Dimension Findings",
-                "What the Investor Does Not Know", "Verdict & Next Action"
-            ])
+        with tab3:
+            st.markdown('<div style="font-size:12px;color:#888;margin-bottom:14px;font-style:italic;">Signals, dependencies and anomalies not visible from a surface read of public data. Every finding grounded in the evidence envelope.</div>', unsafe_allow_html=True)
+            render_intel(intel.get("investor_intelligence", []))
 
-            with tab1:
-                st.markdown(intel.get("executive_summary",""))
-                cert_block(result)
+        with tab4:
+            vcolor = vc(result.verdict)
+            st.markdown(f"""
+            <div style="background:{vcolor};color:white;padding:14px 20px;border-radius:4px;margin-bottom:14px;">
+              <div style="font-size:11px;opacity:0.7;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Verdict — {result.methodology_version}</div>
+              <div style="font-size:22px;font-weight:700;">{result.verdict}</div>
+            </div>""", unsafe_allow_html=True)
+            st.markdown(intel.get("verdict_section",""))
+            st.markdown(f'<div class="next-action"><div class="na-lbl">Next Action</div><div class="na-txt">{result.next_action}</div></div>', unsafe_allow_html=True)
 
-            with tab2:
-                render_dims(result.dimensions, intel.get("dimension_findings", {}))
+        st.markdown("")
+        dl_button(pdf_path, result.asset_id)
 
-            with tab3:
-                st.markdown('<div style="font-size:12px;color:#888;margin-bottom:14px;font-style:italic;">Signals, dependencies and anomalies not visible from a surface read of public data. Every finding grounded in the evidence envelope.</div>', unsafe_allow_html=True)
-                render_intel(intel.get("investor_intelligence", []))
+        with st.expander("Evidence Envelope (JSON)"):
+            st.json(result.evidence_envelope)
 
-            with tab4:
-                vcolor = vc(result.verdict)
-                st.markdown(f"""
-                <div style="background:{vcolor};color:white;padding:14px 20px;border-radius:4px;margin-bottom:14px;">
-                  <div style="font-size:11px;opacity:0.7;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Verdict — {result.methodology_version}</div>
-                  <div style="font-size:22px;font-weight:700;">{result.verdict}</div>
-                </div>""", unsafe_allow_html=True)
-                st.markdown(intel.get("verdict_section",""))
-                st.markdown(f'<div class="next-action"><div class="na-lbl">Next Action</div><div class="na-txt">{result.next_action}</div></div>', unsafe_allow_html=True)
-
-            st.markdown("")
-            dl_button(pdf_path, result.asset_id)
-
-            with st.expander("Evidence Envelope (JSON)"):
-                st.json(result.evidence_envelope)
-
-            if sources_meta.get("sources_consulted"):
-                with st.expander(f"Sources consulted ({len(sources_meta['sources_consulted'])})"):
-                    for s in sources_meta["sources_consulted"]:
-                        st.markdown(f"**{s.get('field','')}** — {s.get('source','')} | Found: {s.get('value_found','')}")
+        if sources_meta.get("sources_consulted"):
+            with st.expander(f"Sources consulted ({len(sources_meta['sources_consulted'])})"):
+                for s in sources_meta["sources_consulted"]:
+                    st.markdown(f"**{s.get('field','')}** — {s.get('source','')} | Found: {s.get('value_found','')}")
 
     elif st.session_state.report_ready and st.session_state.last_result:
-        # Restore previous result on rerun
         result  = st.session_state.last_result
         intel   = st.session_state.last_intel
         snippet = st.session_state.snippet
-        paid    = st.session_state.paid
-        if paid and st.session_state.pdf_path:
+        if st.session_state.pdf_path:
             render_banner(result.investment_readiness_score, result.verdict)
             dl_button(st.session_state.pdf_path, result.asset_id)
 
