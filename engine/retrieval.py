@@ -12,6 +12,7 @@ import os
 import urllib.request
 import urllib.error
 from engine.scoring import AssetInput
+from engine.known_assets import get_known_asset_seed, get_known_jurisdiction_seed
 
 
 # ---------------------------------------------------------------------------
@@ -387,8 +388,36 @@ def retrieve_asset_data(asset_name: str, jurisdiction: str,
         return _mock_retrieval(asset_name, jurisdiction), {"mock": True}
 
     try:
+        # Apply known facts seed before web search
+        # This ensures well-documented assets never return unknown commodity
+        jur_map = {
+            "zambia": "ZMB", "ghana": "GHA", "tanzania": "TZA",
+            "botswana": "BWA", "namibia": "NAM", "drc": "COD",
+            "guinea": "GIN", "zimbabwe": "ZWE", "mozambique": "MOZ",
+        }
+        jcode = jur_map.get(jurisdiction.lower(), "")
+        asset_seed     = get_known_asset_seed(asset_name)
+        jur_seed       = get_known_jurisdiction_seed(jcode)
+
         op        = _identify_operator(api_key, asset_name, jurisdiction, context)
         retrieved = _retrieve_fields(api_key, asset_name, jurisdiction, context, op)
+
+        # Merge seeds: seed provides floor values, retrieval overwrites with live data
+        # Priority: retrieved > seed (live data wins if found)
+        merged = {**asset_seed, **jur_seed}
+        for field, value in merged.items():
+            # Only apply seed if retrieved value is missing/default
+            current = retrieved.get(field)
+            is_default = (
+                current is None or
+                current == "none" or
+                current == "non-implementing" or
+                current == "unknown" or
+                current == "" or
+                (isinstance(current, str) and "retrieval required" in current.lower())
+            )
+            if is_default:
+                retrieved[field] = value
     except RuntimeError as e:
         return _mock_retrieval(asset_name, jurisdiction), {
             "mock": True, "api_error": str(e)
@@ -502,4 +531,5 @@ def _mock_retrieval(asset_name: str, jurisdiction: str) -> AssetInput:
         wb_rule_of_law_percentile=None,
         wb_regulatory_quality_percentile=None,
     )
+
 
