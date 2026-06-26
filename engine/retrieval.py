@@ -157,6 +157,12 @@ Return exactly this JSON. Populate every field you can from search results. Only
     "dfi_relationships": ["named DFIs"]
   },
 
+  "environmental_permit_status": "permitted" or "in_progress" or "not_filed" or "unknown",
+  "esia_completed": <true/false>,
+  "community_consultation_evidence": "documented" or "partial" or "none",
+  "social_licence_disputes": <true/false>,
+  "water_licence_status": "permitted" or "pending" or "not_filed" or "unknown",
+
   "sources_consulted": [
     {"field": "field_name", "source": "source", "url": "url or null", "retrieved": "YYYY-MM-DD", "value_found": "value"}
   ],
@@ -457,6 +463,12 @@ def _dict_to_asset_input(d: dict) -> AssetInput:
         listed_vehicle=d.get("listed_vehicle", "unlisted"),
         recent_capital_raise=d.get("recent_capital_raise", "none"),
         gulf_western_investor_linked=d.get("gulf_western_investor_linked", False),
+
+        environmental_permit_status=d.get("environmental_permit_status", "unknown"),
+        esia_completed=d.get("esia_completed", False),
+        community_consultation_evidence=d.get("community_consultation_evidence", "none"),
+        social_licence_disputes=d.get("social_licence_disputes", False),
+        water_licence_status=d.get("water_licence_status", "unknown"),
     )
 
 
@@ -490,3 +502,4 @@ def _mock_retrieval(asset_name: str, jurisdiction: str) -> AssetInput:
         wb_rule_of_law_percentile=None,
         wb_regulatory_quality_percentile=None,
     )
+
