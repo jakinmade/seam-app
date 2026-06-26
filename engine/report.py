@@ -3,6 +3,13 @@ SEAM PDF Report Generator
 Sprint 2 — WeasyPrint PDF from engine scores + Claude intelligence layer.
 
 Style: CLEARANCE-equivalent. Professional. Clean. Amber #C8962E / Navy #0B1929.
+
+Report order:
+  1. Principal Finding  (promoted — this is the moat)
+  2. What the Investor Does Not Know
+  3. Dimension Findings  (with Evidence Confidence)
+  4. Verdict and Next Action
+  5. Evidence Reference
 """
 
 from weasyprint import HTML
@@ -13,13 +20,18 @@ import os
 AMBER = "#C8962E"
 NAVY = "#0B1929"
 
-
 VERDICT_COLOURS = {
     "PROCEED": "#1A7A3A",
     "PROCEED WITH CONDITIONS": "#B8860B",
     "MONITOR": "#1A5FA8",
     "CAUTION": "#C65C00",
     "AVOID": "#CC0000",
+}
+
+CONFIDENCE_COLOURS = {
+    "High": "#1A7A3A",
+    "Medium": "#B8860B",
+    "Low": "#CC0000",
 }
 
 
@@ -31,11 +43,20 @@ def score_bar(score: float, width: int = 200) -> str:
     </div>"""
 
 
+def confidence_badge(level: str) -> str:
+    colour = CONFIDENCE_COLOURS.get(level, "#888")
+    return (
+        f'<span style="display:inline-block;padding:2px 8px;border-radius:3px;'
+        f'background:{colour};color:white;font-size:10px;font-weight:bold;'
+        f'letter-spacing:0.5px;margin-left:8px;">Evidence: {level}</span>'
+    )
+
+
 def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
     verdict_color = VERDICT_COLOURS.get(result.verdict, "#333333")
     generated = datetime.fromisoformat(result.generated_at).strftime("%d %B %Y, %H:%M UTC")
 
-    # Dimension rows
+    # --- Dimension rows (Section 3) ---
     dim_rows = ""
     for d in result.dimensions:
         gaps_html = ""
@@ -52,9 +73,21 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
                     color = "#1A7A3A" if a["adjustment"] > 0 else "#CC0000"
                     adj_html += f'<br><span style="font-size:11px;color:{color};">{sign}{a["adjustment"]}pts: {a["reason"]}</span>'
 
+        # New structure: dimension_findings is now a dict with "finding" and "evidence_confidence"
+        dim_intel = intel.get("dimension_findings", {}).get(d.code, {})
+        if isinstance(dim_intel, dict):
+            finding_text = dim_intel.get("finding", "")
+            conf_level = dim_intel.get("evidence_confidence", "Low")
+        else:
+            # backward compat if plain string
+            finding_text = dim_intel
+            conf_level = "Low"
+
+        conf_html = confidence_badge(conf_level) if conf_level else ""
+
         finding_html = ""
-        if intel.get("dimension_findings", {}).get(d.code):
-            finding_html = f'<div style="margin-top:6px;font-size:12px;color:#444;line-height:1.5;">{intel["dimension_findings"][d.code]}</div>'
+        if finding_text:
+            finding_html = f'<div style="margin-top:6px;font-size:12px;color:#444;line-height:1.5;">{finding_text}</div>'
 
         dim_rows += f"""
         <tr>
@@ -62,7 +95,7 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
             <span style="font-weight:bold;color:{NAVY};font-size:13px;">{d.code}</span>
           </td>
           <td style="padding:10px 12px;border-bottom:1px solid #e8e8e8;vertical-align:top;">
-            <div style="font-weight:bold;color:#222;font-size:13px;">{d.name}</div>
+            <div style="font-weight:bold;color:#222;font-size:13px;">{d.name}{conf_html}</div>
             <div style="color:#888;font-size:11px;margin-top:2px;">Weight: {int(d.weight*100)}%</div>
             {adj_html}{gaps_html}
             {finding_html}
@@ -74,7 +107,7 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
           </td>
         </tr>"""
 
-    # Investor intelligence items
+    # --- Investor intelligence items (Section 2) ---
     intel_items = ""
     for i, finding in enumerate(intel.get("investor_intelligence", []), 1):
         intel_items += f"""
@@ -85,7 +118,7 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
           <div style="font-size:13px;color:#333;line-height:1.6;">{finding}</div>
         </div>"""
 
-    # Floor rules
+    # --- Floor rules ---
     floor_html = ""
     if result.floor_rules_triggered:
         rules_text = " ".join(
@@ -98,6 +131,9 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
           <div style="font-weight:bold;color:#C65C00;font-size:13px;margin-bottom:4px;">Floor Rules Triggered</div>
           {rules_text}
         </div>"""
+
+    # Principal finding
+    principal = intel.get("principal_finding", intel.get("executive_summary", ""))
 
     html = f"""<!DOCTYPE html>
 <html>
@@ -168,14 +204,21 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
   </tr>
 </table>
 
-<!-- SECTION 1: EXECUTIVE SUMMARY -->
-<h2>1. Executive Summary</h2>
-<div style="font-size:13px;color:#333;line-height:1.6;">
-  {intel.get("executive_summary", "").replace(chr(10), "<br>")}
+<!-- SECTION 1: PRINCIPAL FINDING -->
+<h2>1. Principal Finding</h2>
+<div style="background:#f4f0e8;border-left:4px solid {AMBER};padding:14px 18px;font-size:13px;color:#333;line-height:1.7;">
+  {principal.replace(chr(10), "<br>")}
 </div>
 
-<!-- SECTION 2: DIMENSION FINDINGS -->
-<h2>2. Dimension Findings</h2>
+<!-- SECTION 2: WHAT THE INVESTOR DOES NOT KNOW -->
+<h2>2. What the Investor Does Not Know</h2>
+<div style="font-size:12px;color:#666;margin-bottom:14px;">
+  Signals, dependencies and structural risks not visible from a surface read of public data. Each finding is grounded in the evidence envelope.
+</div>
+{intel_items}
+
+<!-- SECTION 3: DIMENSION FINDINGS -->
+<h2>3. Dimension Findings</h2>
 <table style="width:100%;border:1px solid #e8e8e8;">
   <thead>
     <tr style="background:{NAVY};">
@@ -188,13 +231,6 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
     {dim_rows}
   </tbody>
 </table>
-
-<!-- SECTION 3: INVESTOR INTELLIGENCE -->
-<h2>3. What the Investor Does Not Know</h2>
-<div style="font-size:12px;color:#666;margin-bottom:14px;font-style:italic;">
-  Signals, dependencies and anomalies not visible from a surface read of public data. Each finding is grounded in the evidence envelope.
-</div>
-{intel_items}
 
 <!-- SECTION 4: VERDICT AND NEXT ACTION -->
 <h2>4. Verdict and Next Action</h2>
@@ -216,7 +252,7 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
   <div style="font-size:13px;color:#333;font-weight:bold;">{result.next_action}</div>
 </div>
 
-<!-- EVIDENCE REFERENCE -->
+<!-- SECTION 5: EVIDENCE REFERENCE -->
 <h2>5. Evidence Reference</h2>
 <table style="width:100%;font-size:11px;color:#666;">
   <tr>
@@ -245,12 +281,12 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
   </tr>
   <tr>
     <td style="padding:4px 0;"><strong>Data sources</strong></td>
-    <td>EITI Zambia, USGS Geodatabase, Fraser Institute, World Bank WGI, Zambia MRC LOCAS, ASX/TSX/AIM filings, Ministry of Mines publications</td>
+    <td>EITI, Fraser Institute, World Bank WGI, USGS, ASX/TSX/AIM filings, Ministry of Mines publications, cadastre portals</td>
   </tr>
 </table>
 
 <div style="margin-top:24px;padding-top:12px;border-top:1px solid #e8e8e8;font-size:10px;color:#aaa;text-align:center;">
-  SEAM Investment Readiness Reports are produced for informational purposes only. They do not constitute investment advice, legal advice or financial advice. 
+  SEAM Investment Readiness Reports are produced for informational purposes only. They do not constitute investment advice, legal advice or financial advice.
   They do not constitute due diligence and are not a substitute for independent technical, legal or financial assessment.
   akinmade.co.uk  |  CONFIDENTIAL
 </div>
