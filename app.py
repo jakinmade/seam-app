@@ -401,19 +401,53 @@ if page == "Assessment":
         render_banner(result.investment_readiness_score, result.verdict, getattr(result, "evidence_completeness_score", None))
 
         tab1, tab2, tab3, tab4 = st.tabs([
-            "Executive Summary", "Dimension Findings",
-            "What the Investor Does Not Know", "Verdict & Next Action"
+            "Investment Decision", "Dimension Detail",
+            "Material Unknowns", "Verdict & Next Action"
         ])
 
         with tab1:
-            st.markdown(intel.get("executive_summary",""))
+            inv_dec = intel.get("investment_decision", {})
+            if inv_dec:
+                v_conf = inv_dec.get("verdict_confidence", "Low")
+                conf_col = {"High": "#1A7A3A", "Medium": "#B8860B", "Low": "#CC0000"}.get(v_conf, "#888")
+                st.markdown(f"""
+                <div style="background:#f5f0e8;border-left:3px solid #C8962E;padding:12px 16px;margin-bottom:12px;font-size:13px;line-height:1.6;">
+                <b>Verdict:</b> {inv_dec.get('verdict', result.verdict)}<br>
+                <b>Score:</b> {inv_dec.get('score', result.investment_readiness_score)}/100 &nbsp;|&nbsp;
+                <b>Evidence Completeness:</b> {inv_dec.get('evidence_completeness', result.evidence_completeness_score)}/100<br>
+                <b>Verdict Confidence:</b> <span style="color:{conf_col};font-weight:bold;">{v_conf}</span><br>
+                <b>Critical Risks:</b> {inv_dec.get('critical_risks', len(result.floor_rules_triggered))}<br>
+                <b>Recommended Action:</b> {inv_dec.get('recommended_action', result.next_action)}
+                </div>""", unsafe_allow_html=True)
+                risks = intel.get("critical_risks", [])
+                if risks:
+                    st.markdown("**Critical Risks**")
+                    for r in risks:
+                        st.markdown(f"- {r}")
+                drivers = intel.get("investment_drivers", {})
+                if drivers:
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
+                        st.markdown("**Positive**")
+                        for p in drivers.get("positive", []):
+                            st.markdown(f"- {p}")
+                    with c2:
+                        st.markdown("**Negative**")
+                        for n in drivers.get("negative", []):
+                            st.markdown(f"- {n}")
+                    with c3:
+                        st.markdown("**Unknown**")
+                        for u in drivers.get("unknown", []):
+                            st.markdown(f"- {u}")
+            else:
+                st.markdown(intel.get("principal_finding", intel.get("executive_summary","")))
             cert_block(result)
 
         with tab2:
             render_dims(result.dimensions, intel.get("dimension_findings", {}))
 
         with tab3:
-            st.markdown('<div style="font-size:12px;color:#888;margin-bottom:14px;font-style:italic;">Signals, dependencies and anomalies not visible from a surface read of public data. Every finding grounded in the evidence envelope.</div>', unsafe_allow_html=True)
+            st.markdown('<div style="font-size:12px;color:#888;margin-bottom:14px;font-style:italic;">Material unknowns: fields absent from public record that are relevant to investment assessment.</div>', unsafe_allow_html=True)
             render_intel(intel.get("investor_intelligence", []))
 
         with tab4:
@@ -530,5 +564,6 @@ They do not constitute due diligence and are not a substitute for independent te
 Every investor must conduct their own assessment appropriate to their mandate, jurisdiction and risk appetite.
 Methodology SEAM-M-v1.0 | Rules SEAM-R-v1.0 | akinmade.co.uk | CONFIDENTIAL
 </div>""", unsafe_allow_html=True)
+
 
 
