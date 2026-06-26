@@ -284,7 +284,7 @@ st.markdown(f"""
   </div>
   <div class="seam-ver">
     Methodology SEAM-M-v1.0 &nbsp;|&nbsp; Rules SEAM-R-v1.0<br>
-    9 jurisdictions &nbsp;|&nbsp; akinmade.co.uk
+    Bankability Intelligence &nbsp;|&nbsp; 9 jurisdictions &nbsp;|&nbsp; akinmade.co.uk
   </div>
 </div>""", unsafe_allow_html=True)
 
@@ -301,8 +301,8 @@ st.markdown("---")
 
 if page == "Assessment":
 
-    st.markdown("**Know what the public record says before you commit.**")
-    st.caption("Enter a mining asset. SEAM searches public sources, scores six investment dimensions, and produces a structured decision report.")
+    st.markdown("**Bankability Intelligence for African Mining Assets.**")
+    st.caption("SEAM retrieves public evidence, applies a deterministic methodology, and produces a traceable investment readiness decision. Every conclusion is auditable. No analyst opinion in the scoring path.")
     st.markdown("")
 
     mode = st.radio("Mode", ["Live retrieval", "Pre-loaded asset"], horizontal=True)
@@ -354,7 +354,7 @@ if page == "Assessment":
                 asset_input = ALL_ASSETS[use_preloaded]
             else:
                 with st.status("Locating asset records...", expanded=True) as s:
-                    st.write(f"Asset: {asset_name_input} | Jurisdiction: {jurisdiction_input}")
+                    st.write(f"Retrieving public evidence: {asset_name_input} | {jurisdiction_input}")
                     st.write("Consulting: EITI, Fraser Institute, World Bank WGI, exchange filings, government cadastre, USGS")
                     asset_input, sources_meta = retrieve_asset_data(asset_name_input, jurisdiction_input, context_input)
                     if sources_meta.get("mock"):
@@ -362,7 +362,7 @@ if page == "Assessment":
                             st.warning(f"Live data retrieval unavailable: {sources_meta['api_error']}. Showing conservative defaults — score is indicative only.")
                         else:
                             st.write("Live retrieval active in deployed app with ANTHROPIC_API_KEY.")
-                    s.update(label="Evidence located. Building assessment.", state="complete")
+                    s.update(label="Evidence envelope assembled.", state="complete")
 
             # STEP 2 — Score
             with st.status("Scoring engine...", expanded=False) as s:
@@ -721,7 +721,7 @@ elif page == "SEAM Watch":
 
 elif page == "Free Snippet":
     st.markdown("### Free Snippet")
-    st.caption("Three public scores on any asset scored in this session. No registration. Verify every source before spending a penny.")
+    st.caption("A bankability signal on any asset scored in this session. Every score is traceable to a named public source.")
 
     watch = st.session_state.watch_list
     if not watch:
@@ -747,6 +747,7 @@ They do not constitute due diligence and are not a substitute for independent te
 Every investor must conduct their own assessment appropriate to their mandate, jurisdiction and risk appetite.
 Methodology SEAM-M-v1.0 | Rules SEAM-R-v1.0 | akinmade.co.uk | CONFIDENTIAL
 </div>""", unsafe_allow_html=True)
+
 
 
 
