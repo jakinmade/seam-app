@@ -1,0 +1,284 @@
+# SEAM Rules Configuration
+# Version: SEAM-R-v1.0
+# Methodology: SEAM-M-v1.0
+# Effective: June 2026
+#
+# This file defines all scoring weights, thresholds and floor rules.
+# The engine reads from this file. Rules are never hardcoded.
+# Increment version on any change. Archive previous versions.
+
+version: "SEAM-R-v1.0"
+methodology_version: "SEAM-M-v1.0"
+effective_date: "2026-06-01"
+description: "Initial production ruleset. Zambia-first. Six dimensions. Five verdict thresholds."
+
+# ── DIMENSION WEIGHTINGS ──────────────────────────────────────────────────────
+# Must sum to 1.0
+
+dimensions:
+  D1:
+    name: "Jurisdiction Stability"
+    weight: 0.25
+  D2:
+    name: "Revenue Transparency"
+    weight: 0.20
+  D3:
+    name: "Asset Data Quality"
+    weight: 0.20
+  D4:
+    name: "Local Content Compliance Posture"
+    weight: 0.15
+  D5:
+    name: "Infrastructure Readiness"
+    weight: 0.12
+  D6:
+    name: "Capital Access Signals"
+    weight: 0.08
+
+# ── D1 SUB-COMPONENT WEIGHTS ──────────────────────────────────────────────────
+
+d1_sub_weights:
+  fraser_institute: 0.50
+  wb_rule_of_law: 0.25
+  wb_regulatory_quality: 0.25
+
+d1_adjustments:
+  regulatory_change_last_12m: -5
+  mining_code_revision_in_progress: -3
+  investment_arbitration_last_5y: -8
+  bilateral_investment_treaty: +3
+  eiti_compliant_country: +3
+
+d1_floor:
+  rule: "D1-FLOOR-001"
+  description: "WB Rule of Law below 40 caps D1 score at 85"
+  wb_rule_of_law_threshold: 40
+  max_score_when_triggered: 85
+
+# ── D2 SUB-COMPONENT SCORES ───────────────────────────────────────────────────
+
+d2_eiti_scores:
+  compliant: 40.0
+  candidate: 25.0
+  non-implementing: 0.0
+
+d2_bo_scores:
+  full: 35.0
+  partial: 15.0
+  none: 0.0
+
+d2_sub_weights:
+  eiti_implementation: 0.40
+  beneficial_ownership: 0.35
+  payment_disclosure_quality: 0.25
+
+d2_adjustments:
+  pep_in_ownership_chain: -15
+  fatf_grey_list_jurisdiction: -10
+  payment_data_gap_over_24m: -8
+
+# ── D3 SUB-COMPONENT SCORES ───────────────────────────────────────────────────
+
+d3_resource_standard_scores:
+  ni43101_jorc_u3y: 40.0
+  ni43101_jorc_o3y: 25.0
+  samrec: 30.0
+  none: 0.0
+
+d3_reserve_scores:
+  proven_probable: 30.0
+  resource_only: 15.0
+  historical: 5.0
+  none: 0.0
+
+d3_production_scores:
+  current_u12m: 20.0
+  current_12_36m: 10.0
+  none: 0.0
+
+d3_stage_scores:
+  producing: 10.0
+  development: 8.0
+  prefeasibility: 5.0
+  exploration: 2.0
+
+d3_sub_weights:
+  resource_standard: 0.40
+  reserve_classification: 0.30
+  production_data: 0.20
+  exploration_stage: 0.10
+
+d3_adjustments:
+  unresolved_resource_conflict: -8
+  estimate_by_company_employee: -10
+  no_independent_technical_report: -15
+
+# ── D4 SUB-COMPONENT SCORES ───────────────────────────────────────────────────
+
+d4_licence_holder_scores:
+  citizen_owned: 35.0
+  citizen_empowered: 20.0
+  foreign_jv: 10.0
+  other: 0.0
+
+d4_filing_scores:
+  submitted_verified: 30.0
+  submitted_unverified: 15.0
+  not_filed: 0.0
+
+d4_procurement_scores:
+  confirmed_20pct_plus: 20.0
+  effort_sub_20pct: 10.0
+  none: 0.0
+
+d4_sdp_scores:
+  documented: 15.0
+  in_development: 7.0
+  none: 0.0
+
+d4_sub_weights:
+  licence_holder: 0.35
+  compliance_filing: 0.30
+  local_procurement: 0.20
+  supplier_development: 0.15
+
+d4_adjustments:
+  reserved_services_non_local: -20
+
+# ── D5 SUB-COMPONENT SCORES ───────────────────────────────────────────────────
+
+d5_power_scores:
+  grid_with_redundancy: 30.0
+  grid_no_redundancy: 20.0
+  diesel_solar: 10.0
+  none: 0.0
+
+d5_road_scores:
+  paved_u50km: 20.0
+  paved_50_200km: 15.0
+  unsealed: 5.0
+  none: 0.0
+
+d5_rail_scores:
+  operating_u100km: 20.0
+  operating_capacity_constrained: 12.0
+  rail_o100km: 6.0
+  none: 0.0
+
+d5_water_scores:
+  permitted_documented: 15.0
+  present_no_permit: 8.0
+  none: 0.0
+
+d5_port_scores:
+  u500km: 15.0
+  u1000km: 10.0
+  over1000km: 5.0
+
+d5_port_thresholds:
+  near: 500
+  mid: 1000
+
+d5_lobito_rail_bonus: 5.0
+
+d5_sub_weights:
+  power: 0.30
+  road: 0.20
+  rail: 0.20
+  water: 0.15
+  port: 0.15
+
+# ── D6 SUB-COMPONENT SCORES ───────────────────────────────────────────────────
+
+d6_dfi_scores:
+  named_project_asset: 40.0
+  jurisdiction_only: 20.0
+  none: 0.0
+
+d6_listed_scores:
+  asx_tsx_aim_active: 30.0
+  otc_listed: 15.0
+  unlisted: 0.0
+
+d6_capital_raise_scores:
+  u18m: 20.0
+  18_36m: 10.0
+  none: 0.0
+
+d6_gulf_western_score: 10.0
+
+d6_sub_weights:
+  dfi_engagement: 0.40
+  listed_vehicle: 0.30
+  capital_raise: 0.20
+  gulf_western: 0.10
+
+# ── VERDICT THRESHOLDS ────────────────────────────────────────────────────────
+
+verdicts:
+  - code: "PROCEED"
+    min: 80
+    max: 100
+    label: "Public data confirms the asset meets minimum thresholds across all six dimensions. The evidence base is sufficient to support commissioning full technical due diligence."
+    next_action: "Commission independent NI43-101 or JORC compliant resource estimate verification. Estimated cost £150k–£300k. Estimated timeline 8–12 weeks."
+
+  - code: "PROCEED WITH CONDITIONS"
+    min: 65
+    max: 79
+    label: "Asset meets threshold on at least four of six dimensions. Specific gaps are identified and cited in the Evidence Envelope. These gaps are resolvable before full commitment."
+    next_action: "Address the named conditions identified in the Evidence Envelope. Return for re-score once conditions are met."
+
+  - code: "MONITOR"
+    min: 45
+    max: 64
+    label: "Asset has genuine potential but one or more dimensions are in flux. Premature to commit due diligence spend."
+    next_action: "SEAM places this asset on 90-day monitoring cycle. Act when the data moves — not when an advisor remembers to call."
+
+  - code: "CAUTION"
+    min: 25
+    max: 44
+    label: "Specific red flags identified in the evidence base. Named, cited and reproducible. Some flags may be resolvable — SEAM distinguishes structural from addressable problems."
+    next_action: "Review the named red flags in the Evidence Envelope. Identify which are resolvable at asset level and which are structural."
+
+  - code: "AVOID"
+    min: 0
+    max: 24
+    label: "Evidence base shows fundamental problems across multiple dimensions that cannot be resolved at asset level."
+    next_action: "Stand down. The Evidence Envelope provides documented rationale for declining — ready to present to an investment committee as the basis for a no-go decision without further spend."
+
+# ── FLOOR RULES ───────────────────────────────────────────────────────────────
+
+floor_rules:
+  - code: "FLOOR-D2-001"
+    dimension: "D2"
+    condition: "score_below"
+    threshold: 20
+    max_verdict: "CAUTION"
+    description: "D2 (Revenue Transparency) below 20 — maximum verdict is CAUTION regardless of aggregate score"
+
+  - code: "FLOOR-D1-001"
+    dimension: "D1"
+    condition: "score_below"
+    threshold: 25
+    max_verdict: "MONITOR"
+    description: "D1 (Jurisdiction Stability) below 25 — maximum verdict is MONITOR regardless of aggregate score"
+
+  - code: "FLOOR-D3-001"
+    dimension: "D3"
+    condition: "score_below"
+    threshold: 15
+    max_verdict: "CAUTION"
+    description: "D3 (Asset Data Quality) below 15 — maximum verdict is CAUTION regardless of aggregate score"
+
+  - code: "FLOOR-BO-001"
+    dimension: "D2"
+    condition: "beneficial_ownership_none"
+    threshold: null
+    max_verdict: "CAUTION"
+    description: "Beneficial ownership cannot be traced to individual natural persons — maximum verdict is CAUTION"
+
+# ── MONITORING ────────────────────────────────────────────────────────────────
+
+monitoring:
+  score_delta_alert_threshold: 5
+  snippet_dimensions: ["D1", "D2", "D3"]

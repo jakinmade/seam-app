@@ -1,15 +1,21 @@
 {
+  "schema_version": "SEAM-ENV-v1.0",
   "asset_id": "ZMB-001",
   "asset_name": "Konkola Copper Mines (KCM / CopperTech)",
+  "jurisdiction": "Zambia",
+  "jurisdiction_code": "ZMB",
+  "commodity": "Copper",
+  "province": "Copperbelt",
   "methodology_version": "SEAM-M-v1.0",
   "rules_version": "SEAM-R-v1.0",
-  "generated_at": "2026-06-26T15:25:30.835114+00:00",
+  "generated_at": "2026-06-26T16:10:50.820871+00:00",
   "investment_readiness_score": 61,
   "verdict": "MONITOR",
   "dimensions": {
     "D1": {
       "name": "Jurisdiction Stability",
       "weight": 0.25,
+      "raw_score": 42.9,
       "adjusted_score": 32.9,
       "weighted_contribution": 8.225,
       "sub_scores": {
@@ -28,29 +34,29 @@
       },
       "adjustments": [
         {
-          "rule": "D1-ADJ-001 v1.0",
+          "rule": "D1-ADJ-regulatory_change_last_12m v1.0",
           "adjustment": -5,
-          "reason": "Regulatory change in past 12 months affecting commodity"
+          "reason": "Regulatory change last 12m"
         },
         {
-          "rule": "D1-ADJ-002 v1.0",
+          "rule": "D1-ADJ-mining_code_revision_in_progress v1.0",
           "adjustment": -3,
-          "reason": "Active mining code revision in progress"
+          "reason": "Mining code revision in progress"
         },
         {
-          "rule": "D1-ADJ-003 v1.0",
+          "rule": "D1-ADJ-investment_arbitration_last_5y v1.0",
           "adjustment": -8,
-          "reason": "Investment arbitration against host government in past 5 years"
+          "reason": "Investment arbitration last 5y"
         },
         {
-          "rule": "D1-ADJ-004 v1.0",
+          "rule": "D1-ADJ-bilateral_investment_treaty v1.0",
           "adjustment": 3,
-          "reason": "Bilateral Investment Treaty with UK, US or UAE in force"
+          "reason": "Bilateral investment treaty"
         },
         {
-          "rule": "D1-ADJ-005 v1.0",
+          "rule": "D1-ADJ-eiti_compliant_country v1.0",
           "adjustment": 3,
-          "reason": "EITI compliant country"
+          "reason": "Eiti compliant country"
         }
       ],
       "rules_applied": [
@@ -58,11 +64,50 @@
         "D1-WB-ROL-001 v1.0",
         "D1-WB-RQ-001 v1.0"
       ],
-      "data_gaps": []
+      "data_gaps": [],
+      "evidence_fields": [
+        {
+          "field": "fraser_investment_attractiveness",
+          "value": 47.3,
+          "source": "Fraser Institute Annual Survey",
+          "source_url": null,
+          "retrieved_date": null,
+          "publication_date": null,
+          "confidence": "high",
+          "verified": true,
+          "rule_code": "D1-FRASER-001",
+          "notes": null
+        },
+        {
+          "field": "wb_rule_of_law_percentile",
+          "value": 36.0,
+          "source": "World Bank WGI",
+          "source_url": null,
+          "retrieved_date": null,
+          "publication_date": null,
+          "confidence": "high",
+          "verified": true,
+          "rule_code": "D1-WB-ROL-001",
+          "notes": null
+        },
+        {
+          "field": "wb_regulatory_quality_percentile",
+          "value": 41.0,
+          "source": "World Bank WGI",
+          "source_url": null,
+          "retrieved_date": null,
+          "publication_date": null,
+          "confidence": "high",
+          "verified": true,
+          "rule_code": "D1-WB-RQ-001",
+          "notes": null
+        }
+      ]
     },
     "D2": {
       "name": "Revenue Transparency",
       "weight": 0.2,
+      "raw_score": 72.0,
       "adjusted_score": 72.0,
       "weighted_contribution": 14.4,
       "sub_scores": {
@@ -85,11 +130,26 @@
         "D2-BO-001 v1.0",
         "D2-PDQ-001 v1.0"
       ],
-      "data_gaps": []
+      "data_gaps": [],
+      "evidence_fields": [
+        {
+          "field": "eiti_implementation_status",
+          "value": "compliant",
+          "source": "EITI \u2014 eiti.org",
+          "source_url": null,
+          "retrieved_date": null,
+          "publication_date": null,
+          "confidence": "high",
+          "verified": true,
+          "rule_code": "D2-EITI-001",
+          "notes": null
+        }
+      ]
     },
     "D3": {
       "name": "Asset Data Quality",
       "weight": 0.2,
+      "raw_score": 85.0,
       "adjusted_score": 77.0,
       "weighted_contribution": 15.4,
       "sub_scores": {
@@ -112,9 +172,9 @@
       },
       "adjustments": [
         {
-          "rule": "D3-ADJ-001 v1.0",
+          "rule": "D3-ADJ-unresolved_resource_conflict v1.0",
           "adjustment": -8,
-          "reason": "Unresolved conflict between resource estimates \u2014 conservative value applied"
+          "reason": "Unresolved resource conflict"
         }
       ],
       "rules_applied": [
@@ -123,25 +183,25 @@
         "D3-PD-001 v1.0",
         "D3-ES-001 v1.0"
       ],
-      "data_gaps": []
+      "data_gaps": [],
+      "evidence_fields": []
     },
     "D4": {
       "name": "Local Content Compliance Posture",
       "weight": 0.15,
+      "raw_score": 82.0,
       "adjusted_score": 82.0,
       "weighted_contribution": 12.3,
       "sub_scores": {
         "licence_holder_status": {
           "score": 35.0,
           "weight": 0.35,
-          "regime_citizen_threshold_pct": 50.1,
-          "regime_empowered_min_pct": 25.0
+          "regime_citizen_threshold_pct": 50.1
         },
         "compliance_filing_status": {
           "score": 30.0,
           "weight": 0.3,
-          "compliance_portal": "LOCAS (Zambia MRC)",
-          "filing_frequency": "Quarterly"
+          "compliance_portal": "LOCAS (Zambia MRC)"
         },
         "local_procurement_evidence": {
           "score": 10.0,
@@ -161,11 +221,13 @@
         "D4-LP-001 v1.0",
         "D4-SDP-001 v1.0"
       ],
-      "data_gaps": []
+      "data_gaps": [],
+      "evidence_fields": []
     },
     "D5": {
       "name": "Infrastructure Readiness",
       "weight": 0.12,
+      "raw_score": 77.0,
       "adjusted_score": 77.0,
       "weighted_contribution": 9.24,
       "sub_scores": {
@@ -193,8 +255,8 @@
       "adjustments": [
         {
           "rule": "D5-LOBITO-001 v1.0",
-          "adjustment": 5,
-          "reason": "Lobito Corridor eligibility adjustment (NW/Copperbelt province)"
+          "adjustment": 5.0,
+          "reason": "Lobito Corridor eligibility (NW/Copperbelt province)"
         }
       ],
       "rules_applied": [
@@ -204,11 +266,13 @@
         "D5-WATER-001 v1.0",
         "D5-PORT-001 v1.0"
       ],
-      "data_gaps": []
+      "data_gaps": [],
+      "evidence_fields": []
     },
     "D6": {
       "name": "Capital Access Signals",
       "weight": 0.08,
+      "raw_score": 20.0,
       "adjusted_score": 20.0,
       "weighted_contribution": 1.6,
       "sub_scores": {
@@ -236,9 +300,24 @@
         "D6-CR-001 v1.0",
         "D6-GW-001 v1.0"
       ],
-      "data_gaps": []
+      "data_gaps": [],
+      "evidence_fields": [
+        {
+          "field": "active_dfi_engagement",
+          "value": "jurisdiction_only",
+          "source": "IFC/AfDB/BII project portals",
+          "source_url": null,
+          "retrieved_date": null,
+          "publication_date": null,
+          "confidence": "high",
+          "verified": false,
+          "rule_code": "D6-DFI-001",
+          "notes": null
+        }
+      ]
     }
   },
   "floor_rules_triggered": [],
-  "data_gaps_summary": []
+  "data_gaps_summary": [],
+  "envelope_hash": "25c7ed320359301102bb030393e28740955540fadabe4a986ad4a3045d277861"
 }
