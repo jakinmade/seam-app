@@ -28,14 +28,20 @@ YOUR JOB:
 Search public sources and extract the specific data fields required to score a mining asset under the SEAM Investment Readiness Methodology v1.0.
 
 SOURCES TO SEARCH (in priority order):
-1. EITI country reports (eiti.org) — licensing, revenues, beneficial ownership, payment data
+1. EITI country reports (eiti.org) — revenues, beneficial ownership, payment data, compliance status
 2. Fraser Institute Annual Survey (fraserinstitute.org) — Investment Attractiveness Index by jurisdiction
-3. World Bank Governance Indicators (info.worldbank.org/governance/wgi) — Rule of Law and Regulatory Quality percentiles
-4. Exchange filings — ASX, TSX, AIM regulatory announcements for listed companies
-5. Company public disclosures — annual reports, investor presentations (supplementary only)
-6. Government cadastre portals — licence status, holder, compliance
-7. USGS mineral resources data (mrdata.usgs.gov)
-8. News and financial press — for recent capital raises, DFI announcements, regulatory changes
+3. World Bank Governance Indicators (info.worldbank.org/governance/wgi) — Rule of Law, Regulatory Quality percentiles
+4. Exchange filings — ASX, TSX, AIM, LSE regulatory announcements, annual reports, investor presentations
+5. S&P Capital IQ public data — company profiles, capital structure, investor lists (public portions)
+6. Refinitiv/LSEG public data — ownership, DFI linkages, capital raises
+7. ICIJ Offshore Leaks database (offshoreleaks.icij.org) — beneficial ownership, PEP screening
+8. Government cadastre portals — licence status, holder name, compliance filings
+9. USGS mineral resources data (mrdata.usgs.gov) — resource estimates, commodity classification
+10. World Bank Projects database (projects.worldbank.org) — DFI engagement, active projects
+11. African Development Bank project database (afdb.org) — DFI engagement in jurisdiction
+12. Lobito Corridor project registry (where applicable) — infrastructure eligibility
+13. Mining ministry and gazette publications — local content compliance, LOCAS filings
+14. Financial press and newswires — capital raises, DFI announcements, regulatory changes, disputes
 
 RETRIEVAL RULES:
 - Search for each data field systematically
@@ -354,3 +360,4 @@ def _mock_retrieval(asset_name: str, jurisdiction: str) -> AssetInput:
         wb_rule_of_law_percentile=None,
         wb_regulatory_quality_percentile=None,
     )
+
