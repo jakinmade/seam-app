@@ -384,44 +384,75 @@ def retrieve_asset_data(asset_name: str, jurisdiction: str,
                         context: str = "") -> tuple[AssetInput, dict]:
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
 
+    # Jurisdiction code map — used for seeds regardless of API availability
+    jur_map = {
+        "zambia": "ZMB", "ghana": "GHA", "tanzania": "TZA",
+        "botswana": "BWA", "namibia": "NAM", "drc": "COD",
+        "guinea": "GIN", "zimbabwe": "ZWE", "mozambique": "MOZ",
+        "cote d'ivoire": "CIV", "ivory coast": "CIV",
+        "south africa": "ZAF", "mali": "MLI", "burkina faso": "BFA",
+        "senegal": "SEN", "mauritania": "MRT", "nigeria": "NGA",
+        "ethiopia": "ETH", "kenya": "KEN", "uganda": "UGA",
+        "rwanda": "RWA", "angola": "AGO", "cameroon": "CMR",
+        "madagascar": "MDG",
+    }
+    jcode = jur_map.get(jurisdiction.lower(), "")
+
     if not api_key:
-        return _mock_retrieval(asset_name, jurisdiction), {"mock": True}
+        # No API key — build from mock then apply seeds
+        mock = _mock_retrieval(asset_name, jurisdiction)
+        # Convert to dict, apply seeds, convert back
+        mock_dict = {
+            "asset_id": mock.asset_id, "asset_name": mock.asset_name,
+            "jurisdiction": mock.jurisdiction, "jurisdiction_code": mock.jurisdiction_code,
+            "commodity": mock.commodity, "province": mock.province,
+            "eiti_compliant_country": False, "eiti_implementation_status": "non-implementing",
+            "fatf_grey_list_jurisdiction": False, "bilateral_investment_treaty": False,
+            "fraser_investment_attractiveness": None,
+            "wb_rule_of_law_percentile": None,
+            "wb_regulatory_quality_percentile": None,
+        }
+        mock_dict = apply_seeds(mock_dict, asset_name, jcode)
+        return _dict_to_asset_input(mock_dict), {"mock": True}
+
+    # Attempt live retrieval
+    retrieved = None
+    retrieval_error = None
 
     try:
-        # Apply known facts seed before web search
-        # This ensures well-documented assets never return unknown commodity
-        jur_map = {
-            "zambia": "ZMB", "ghana": "GHA", "tanzania": "TZA",
-            "botswana": "BWA", "namibia": "NAM", "drc": "COD",
-            "guinea": "GIN", "zimbabwe": "ZWE", "mozambique": "MOZ",
-            "cote d'ivoire": "CIV", "ivory coast": "CIV",
-        }
-        jcode = jur_map.get(jurisdiction.lower(), "")
-
         op        = _identify_operator(api_key, asset_name, jurisdiction, context)
         retrieved = _retrieve_fields(api_key, asset_name, jurisdiction, context, op)
-
-        # Apply seed layer — jurisdiction facts always apply, asset seed fills gaps
-        # Web-retrieved quantitative values (Fraser, WB) are kept if found
-        retrieved = apply_seeds(retrieved, asset_name, jcode)
     except RuntimeError as e:
-        return _mock_retrieval(asset_name, jurisdiction), {
-            "mock": True, "api_error": str(e)
-        }
+        retrieval_error = str(e)
     except Exception as e:
-        return _mock_retrieval(asset_name, jurisdiction), {
-            "mock": True, "api_error": f"Retrieval failed: {str(e)}"
+        retrieval_error = f"Retrieval failed: {str(e)}"
+
+    # If retrieval failed, start with empty dict — seeds will fill what they can
+    if retrieved is None:
+        retrieved = {
+            "asset_id": f"{jcode}-AUTO-000000",
+            "asset_name": asset_name,
+            "jurisdiction": jurisdiction,
+            "jurisdiction_code": jcode,
         }
+        op = {"asset_name_official": asset_name, "operator": "", "search_confidence": "low"}
+
+    # ALWAYS apply seeds — runs whether retrieval succeeded or failed
+    retrieved = apply_seeds(retrieved, asset_name, jcode)
 
     sources = {
         "sources_consulted": retrieved.pop("sources_consulted", []),
         "data_gaps":         retrieved.pop("data_gaps", []),
         "operator_profile":  retrieved.pop("operator_profile", {}),
         "phase1_operator":   op,
-        "mock": False
+        "mock": retrieval_error is not None,
     }
+    if retrieval_error:
+        sources["api_error"] = retrieval_error
 
     return _dict_to_asset_input(retrieved), sources
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -517,6 +548,7 @@ def _mock_retrieval(asset_name: str, jurisdiction: str) -> AssetInput:
         wb_rule_of_law_percentile=None,
         wb_regulatory_quality_percentile=None,
     )
+
 
 
 
