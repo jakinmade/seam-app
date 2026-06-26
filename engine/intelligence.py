@@ -370,3 +370,4 @@ def _mock_intelligence(prompt: str) -> dict:
 def generate_intelligence(result: ScoringResult, inp: AssetInput) -> dict:
     prompt = build_prompt(result, inp)
     return call_intelligence_engine(prompt)
+
