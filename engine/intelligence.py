@@ -85,7 +85,22 @@ Do not explain the methodology. State the facts about this specific assessment.
 
 ---
 
-BLOCK 5 — COMMODITY CONTEXT
+BLOCK 5 — BANKABILITY CONSTRAINTS
+These are binary facts from the evidence envelope. Not scored. Not opinions.
+State what was found in public sources for each constraint.
+If not found, state "Not confirmed in public sources."
+
+Environmental permit: is an environmental permit or ESIA on the public record?
+Community consultation: is there evidence of community engagement or FPIC process?
+Social licence disputes: is there active community or NGO opposition on record?
+Water licence: is a water use permit on the public record?
+DFI readiness: based on the above constraints, is the asset DFI-ready, conditional, or not ready?
+
+One sentence each. Factual. No inference.
+
+---
+
+BLOCK 6 — COMMODITY CONTEXT
 This is context only. It does not affect the score or verdict.
 State: commodity name, 12-month price trend, whether it is on a critical minerals list, primary demand driver.
 Two sentences maximum. Factual. No opinion.
@@ -158,6 +173,15 @@ Return exactly this JSON. No preamble. No markdown. No explanation:
     "lobito_corridor_relevant": true or false,
     "price_trend_12m": "Rising or Stable or Falling",
     "demand_driver": "one sentence on primary demand driver"
+  },
+  "bankability_constraints": {
+    "environmental_permit": "Permitted | In Progress | Not Filed | Unknown",
+    "esia_on_record": true or false,
+    "community_consultation": "Documented | Partial | None",
+    "social_licence_disputes": true or false,
+    "water_licence": "Permitted | Pending | Not Filed | Unknown",
+    "constraint_summary": "one sentence — overall bankability constraint status",
+    "dfi_readiness": "Ready | Conditional | Not Ready"
   }
 }"""
 
@@ -383,6 +407,15 @@ def _mock_intelligence(prompt: str) -> dict:
             "D6": {"finding": "[Live in Streamlit]", "evidence_confidence": "Low"},
         },
         "verdict_section": f"Verdict: {verdict}. [Live in Streamlit]",
+        "bankability_constraints": {
+            "environmental_permit": "Unknown",
+            "esia_on_record": False,
+            "community_consultation": "None",
+            "social_licence_disputes": False,
+            "water_licence": "Unknown",
+            "constraint_summary": "Live in Streamlit",
+            "dfi_readiness": "Not Ready"
+        },
         "commodity_context": {
             "commodity": "Unknown",
             "outlook": "Neutral",
@@ -399,5 +432,6 @@ def _mock_intelligence(prompt: str) -> dict:
 def generate_intelligence(result: ScoringResult, inp: AssetInput) -> dict:
     prompt = build_prompt(result, inp)
     return call_intelligence_engine(prompt)
+
 
 
