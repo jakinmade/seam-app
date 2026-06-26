@@ -54,51 +54,63 @@ One entry per dimension. Fixed format:
 [D-CODE] [Dimension Name]
 Score: X/100 | Weight: X% | Evidence Confidence: High / Medium / Low
 [Two to four declarative sentences. No more.]
-[List data gaps as bullet points, prefixed with "Gap:"]
+[Data gaps as bullet points prefixed with "Gap:"]
 
-Evidence Confidence levels:
+Evidence Confidence:
 - High: key sub-fields retrieved from verified public sources
 - Medium: some fields retrieved, some defaulted
 - Low: most fields defaulted or absent
 
-SENTENCE RULES FOR DIMENSION FINDINGS:
-- State the score. State what drives it. State what it means for the investor.
-- One fact per sentence.
-- No explanatory connectives: no "This means", "This reflects", "This is because", "The combination of", "Each of which".
-- No rhetorical negation: no "This is not a retrieval gap", "This is not a low score".
-- State gaps factually: "Fraser Index not retrieved. Neutral default applied."
-- If a field produced a score of zero and was confirmed (not defaulted), say: "Confirmed: [field] = [value]."
-- If a field produced a score from a default, say: "Default applied: [field]. Score reflects missing evidence."
+SENTENCE RULES:
+- State the score. State what drives it. State the investment implication. Stop.
+- One fact per sentence. No connectives.
+- DO NOT explain engine mechanics. The reader assumes the engine works.
+- DO NOT write about floor rule ceilings or verdict arithmetic. State the outcome only.
+- VARY field status labels. Never repeat "Confirmed:" six times on one page.
+  Use across your six dimensions: Retrieved. Verified. Public record. On record. Registry status. Observed. Not verified. Not on public record. Absent from public record. No evidence found.
+- Never use: "Combined with...", "Therefore...", "Independently...", "Meaning...", "Each of which..."
 
-EXAMPLE D6 OUTPUT:
+EXAMPLE D6:
 D6 Capital Access Signals
 Score: 0/100 | Weight: 8% | Evidence Confidence: High
-No DFI engagement identified. Vehicle: unlisted. No capital raise in the last 36 months. No Gulf or Western investor linkage. All four sub-fields confirmed during retrieval.
+DFI engagement: no evidence found. Vehicle: unlisted. Capital raise activity (36 months): none on public record. Gulf or Western investor linkage: absent.
 
-EXAMPLE D5 OUTPUT:
+EXAMPLE D5:
 D5 Infrastructure Readiness
 Score: 5/100 | Weight: 12% | Evidence Confidence: Low
-Power supply, road access, rail access and water supply: not retrieved. Conservative defaults applied across all four sub-fields. Port distance: not retrieved. Lobito Corridor eligibility: not confirmed.
-Gap: Infrastructure data not on public record. Score reflects missing evidence, not confirmed absence.
+Power, road, rail and water: not on public record. Port distance: not verified.
+Gap: Infrastructure evidence absent. Score reflects missing evidence, not confirmed deficiency.
 
-EXAMPLE D3 OUTPUT:
+EXAMPLE D3:
 D3 Asset Data Quality
 Score: 2/100 | Weight: 20% | Evidence Confidence: Low
-Resource estimate standard: none. Reserve classification: none. Production data: not on public record. Exploration stage: recorded.
+Resource estimate: none on public record. Reserve classification: none. Production data: absent. Stage: exploration.
 Gap: No compliant resource estimate identified.
 Gap: No production history on public record.
-Triggers: FLOOR-D3-001.
+
+EXAMPLE PRINCIPAL FINDING:
+Score: 12/100. Verdict: AVOID. Three independent floor rules were triggered. The asset fails the minimum investment threshold.
+
+EXAMPLE FLOOR RULE STATEMENT (verdict section only):
+Floor rules: FLOOR-D2-001 (Revenue Transparency: 0/100), FLOOR-D3-001 (Asset Data: 2/100), FLOOR-BO-001 (beneficial ownership unresolved). Score: 12/100. Verdict: AVOID.
+
+DO NOT WRITE:
+- "...each caps the maximum permissible verdict at CAUTION..."
+- "...the aggregate score then produced AVOID, which supersedes..."
+- "...this is not a retrieval gap..."
+- "...the distinction matters for any future retrieval effort..."
+- "...combined with a Copperbelt location..."
+- "...meaning no investable basis exists..."
 
 ---
 
 BLOCK 3 — WHAT THE INVESTOR DOES NOT KNOW
-Three to five findings. Each finding: two to three sentences. No more.
-These must be cross-dimension insights — things not visible from reading each dimension score in isolation.
-Each finding must cite the dimension code and data field it draws from.
-No rhetorical buildup. State the finding. State its implication. Stop.
+Three to five findings. Each finding: two sentences maximum.
+Cross-dimension insights only — not visible from individual scores in isolation.
+Cite dimension code and data field. State the finding. State the implication. Stop.
 
-EXAMPLE FINDING:
-Three floor rules triggered independently (D2: 0/100, D3: 2/100, FLOOR-BO-001). Each caps the maximum verdict at CAUTION on its own. The aggregate score of 12/100 then produced AVOID — a more conservative outcome than any single floor rule required.
+EXAMPLE:
+Three independent floor rules triggered (D2: 0/100, D3: 2/100, FLOOR-BO-001). The asset fails the minimum investment threshold on three separate criteria.
 
 PROHIBITED IN ALL BLOCKS:
 - Em dashes
@@ -361,4 +373,5 @@ def _mock_intelligence(prompt: str) -> dict:
 def generate_intelligence(result: ScoringResult, inp: AssetInput) -> dict:
     prompt = build_prompt(result, inp)
     return call_intelligence_engine(prompt)
+
 
