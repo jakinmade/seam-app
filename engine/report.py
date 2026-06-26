@@ -276,8 +276,8 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
   <tr><td style="padding:3px 0;"><strong>Rules Version</strong></td><td>{result.rules_version}</td></tr>
   <tr><td style="padding:3px 0;"><strong>Generated</strong></td><td>{generated}</td></tr>
   <tr><td style="padding:3px 0;"><strong>Asset ID</strong></td><td>{result.asset_id}</td></tr>
-  <tr><td style="padding:3px 0;"><strong>Scoring Engine</strong></td><td>Deterministic rules engine. No LLM in scoring path. Identical inputs produce identical outputs.</td></tr>
-  <tr><td style="padding:3px 0;"><strong>Intelligence Layer</strong></td><td>Claude (Anthropic) — constrained to evidence envelope. Cannot alter scores or verdicts.</td></tr>
+  <tr><td style="padding:3px 0;"><strong>Scoring Engine</strong></td><td>Deterministic rules engine. No language model in scoring path. Identical inputs always produce identical scores, verdicts and floor rule outcomes.</td></tr>
+  <tr><td style="padding:3px 0;"><strong>Intelligence Engine</strong></td><td>SEAM Intelligence Engine — constrained to the evidence envelope. Cannot alter scores, verdicts or floor rules. Output prose may vary between runs; all scored outputs are deterministic.</td></tr>
   <tr><td style="padding:3px 0;"><strong>Data Sources</strong></td><td>EITI, Fraser Institute, World Bank WGI, USGS, ASX/TSX/AIM filings, Ministry of Mines publications, cadastre portals</td></tr>
 </table>
 
@@ -298,3 +298,4 @@ def generate_pdf(result: ScoringResult, intel: dict, asset_input, output_dir: st
     output_path = os.path.join(output_dir, f"{result.asset_id}_SEAM_Report.pdf")
     HTML(string=html).write_pdf(output_path)
     return output_path
+
