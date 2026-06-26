@@ -484,10 +484,31 @@ if page == "Assessment":
         with st.expander("Evidence Envelope (JSON)"):
             st.json(result.evidence_envelope)
 
+        op = sources_meta.get("phase1_operator", {})
+        if op and op.get("operator"):
+            with st.expander(f"Operator: {op.get('operator','Unknown')}"):
+                st.markdown(f"**Asset (official):** {op.get('asset_name_official','')}")
+                st.markdown(f"**Operator:** {op.get('operator','')}")
+                st.markdown(f"**Majority owner:** {op.get('majority_owner','')}")
+                if op.get("minority_owners"):
+                    st.markdown(f"**Minority owners:** {', '.join(op['minority_owners'])}")
+                st.markdown(f"**Commodity:** {op.get('commodity_primary','')}")
+                st.markdown(f"**Stage:** {op.get('asset_stage','')}")
+                if op.get("listed_vehicle"):
+                    st.markdown(f"**Listed:** {op.get('listed_vehicle','')} on {op.get('exchange','')}")
+                if op.get("known_dfi_links"):
+                    st.markdown(f"**Known DFI links:** {', '.join(op['known_dfi_links'])}")
+                st.markdown(f"**Search confidence:** {op.get('search_confidence','')}")
+
         if sources_meta.get("sources_consulted"):
             with st.expander(f"Sources consulted ({len(sources_meta['sources_consulted'])})"):
                 for s in sources_meta["sources_consulted"]:
                     st.markdown(f"**{s.get('field','')}** — {s.get('source','')} | Found: {s.get('value_found','')}")
+
+        if sources_meta.get("data_gaps"):
+            with st.expander(f"Data gaps ({len(sources_meta['data_gaps'])})"):
+                for g in sources_meta["data_gaps"]:
+                    st.markdown(f"- {g}")
 
     elif st.session_state.report_ready and st.session_state.last_result:
         result  = st.session_state.last_result
@@ -582,6 +603,7 @@ They do not constitute due diligence and are not a substitute for independent te
 Every investor must conduct their own assessment appropriate to their mandate, jurisdiction and risk appetite.
 Methodology SEAM-M-v1.0 | Rules SEAM-R-v1.0 | akinmade.co.uk | CONFIDENTIAL
 </div>""", unsafe_allow_html=True)
+
 
 
 
