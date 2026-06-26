@@ -124,6 +124,7 @@ class ScoringResult:
     floor_rules_triggered: list
     evidence_envelope: dict
     envelope_hash: str
+    evidence_completeness_score: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -451,7 +452,42 @@ def build_evidence_envelope(inp, dimensions, meta):
 # MAIN ENTRY POINT
 # ---------------------------------------------------------------------------
 
-def score_asset(inp: AssetInput, rules_version: str = None) -> ScoringResult:
+def compute_evidence_completeness(inp: AssetInput) -> int:
+    """
+    Score 0-100 reflecting how much of the evidence envelope was retrieved
+    from public sources vs defaulted due to absence.
+
+    Each field is weighted by its scoring impact.
+    Defaulted fields score 0. Retrieved fields score their weight.
+    """
+    checks = [
+        # (retrieved?, weight)
+        (inp.fraser_investment_attractiveness is not None, 8),
+        (inp.wb_rule_of_law_percentile is not None, 6),
+        (inp.wb_regulatory_quality_percentile is not None, 6),
+        (inp.eiti_implementation_status != "non-implementing", 8),
+        (inp.eiti_compliant_country is True, 4),
+        (inp.eiti_payment_disclosure_quality is not None, 6),
+        (inp.beneficial_ownership_disclosure != "none", 6),
+        (inp.resource_estimate_standard != "none", 8),
+        (inp.reserve_classification != "none", 6),
+        (inp.production_data_availability != "none", 6),
+        (inp.commodity and "retrieval required" not in inp.commodity.lower(), 6),
+        (inp.licence_holder_status != "other", 5),
+        (inp.locas_filing_status != "not_filed", 5),
+        (inp.power_supply != "none", 4),
+        (inp.road_access != "none", 4),
+        (inp.water_supply != "none", 3),
+        (inp.port_distance_km is not None, 3),
+        (inp.active_dfi_engagement != "none", 4),
+        (inp.listed_vehicle != "unlisted", 2),
+    ]
+    total_weight = sum(w for _, w in checks)
+    retrieved_weight = sum(w for ok, w in checks if ok)
+    return round((retrieved_weight / total_weight) * 100)
+
+
+
     """Score an asset. Optional rules_version for historical reconstruction."""
     from engine.rules_loader import load_rules
     R = load_rules(rules_version or ACTIVE_VERSION)
@@ -478,6 +514,8 @@ def score_asset(inp: AssetInput, rules_version: str = None) -> ScoringResult:
 
     envelope, fingerprint = build_evidence_envelope(inp, dimensions, meta)
 
+    evidence_completeness = compute_evidence_completeness(inp)
+
     return ScoringResult(
         asset_id=inp.asset_id,
         asset_name=inp.asset_name,
@@ -492,4 +530,6 @@ def score_asset(inp: AssetInput, rules_version: str = None) -> ScoringResult:
         floor_rules_triggered=floor_rules,
         evidence_envelope=envelope,
         envelope_hash=fingerprint,
+        evidence_completeness_score=evidence_completeness,
     )
+
