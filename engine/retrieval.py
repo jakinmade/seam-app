@@ -124,6 +124,81 @@ Flag every field where public data was not found."""
 
 
 # ---------------------------------------------------------------------------
+# HELPERS
+# ---------------------------------------------------------------------------
+
+def _extract_json_from_text(text: str) -> str:
+    """
+    Strip markdown fences and find the outermost JSON object.
+    Handles cases where Claude wraps JSON in ```json ... ``` or adds preamble.
+    """
+    text = text.strip()
+
+    # Strip markdown fences
+    if "```" in text:
+        parts = text.split("```")
+        # parts[1] is the content between the first pair of fences
+        for part in parts[1::2]:  # every odd part is inside fences
+            candidate = part.strip()
+            if candidate.startswith("json"):
+                candidate = candidate[4:].strip()
+            if candidate.startswith("{"):
+                return candidate
+        # fallback: try the whole stripped version
+        text = parts[1].strip()
+        if text.startswith("json"):
+            text = text[4:].strip()
+        return text
+
+    # Find the first { and last } to extract the JSON object
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        return text[start:end + 1]
+
+    return text
+
+
+def _call_claude(api_key: str, payload_dict: dict) -> str:
+    """
+    POST to Claude API and return the final text content block.
+    Handles multi-turn tool use by taking the last text block in the response.
+    """
+    payload = json.dumps(payload_dict).encode("utf-8")
+
+    req = urllib.request.Request(
+        "https://api.anthropic.com/v1/messages",
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "anthropic-version": "2023-06-01",
+            "x-api-key": api_key,
+        },
+        method="POST"
+    )
+
+    with urllib.request.urlopen(req) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+
+    # Collect ALL text blocks; take the last non-empty one.
+    # After web search tool use, Claude emits tool_use + tool_result blocks
+    # then a final text block with the actual answer.
+    text_blocks = [
+        block["text"].strip()
+        for block in data.get("content", [])
+        if block.get("type") == "text" and block.get("text", "").strip()
+    ]
+
+    if not text_blocks:
+        raise ValueError(
+            f"No text content in Claude response. stop_reason={data.get('stop_reason')} "
+            f"blocks={[b.get('type') for b in data.get('content', [])]}"
+        )
+
+    return text_blocks[-1]
+
+
+# ---------------------------------------------------------------------------
 # RETRIEVAL ENGINE
 # ---------------------------------------------------------------------------
 
@@ -141,44 +216,35 @@ def retrieve_asset_data(asset_name: str, jurisdiction: str, context: str = "") -
     )
 
     if not api_key:
-        # Return mock populated input for testing without API key
         return _mock_retrieval(asset_name, jurisdiction), {"mock": True}
 
-    payload = json.dumps({
+    # First attempt: with web search
+    payload = {
         "model": "claude-sonnet-4-6",
         "max_tokens": 4000,
         "system": RETRIEVAL_SYSTEM_PROMPT,
         "tools": [{"type": "web_search_20250305", "name": "web_search"}],
         "messages": [{"role": "user", "content": prompt}]
-    }).encode("utf-8")
+    }
 
-    req = urllib.request.Request(
-        "https://api.anthropic.com/v1/messages",
-        data=payload,
-        headers={
-            "Content-Type": "application/json",
-            "anthropic-version": "2023-06-01",
-            "x-api-key": api_key,
-        },
-        method="POST"
-    )
+    raw = _call_claude(api_key, payload)
+    raw = _extract_json_from_text(raw)
 
-    with urllib.request.urlopen(req) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
+    # If still not parseable, retry without web search tool
+    # (sometimes Claude adds preamble when web search is enabled)
+    try:
+        retrieved = json.loads(raw)
+    except json.JSONDecodeError:
+        payload_no_search = {
+            "model": "claude-sonnet-4-6",
+            "max_tokens": 4000,
+            "system": RETRIEVAL_SYSTEM_PROMPT,
+            "messages": [{"role": "user", "content": prompt}]
+        }
+        raw = _call_claude(api_key, payload_no_search)
+        raw = _extract_json_from_text(raw)
+        retrieved = json.loads(raw)
 
-    # Extract the final text response (after tool use)
-    raw = ""
-    for block in data.get("content", []):
-        if block.get("type") == "text":
-            raw = block["text"].strip()
-
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-    raw = raw.strip()
-
-    retrieved = json.loads(raw)
     sources = {
         "sources_consulted": retrieved.pop("sources_consulted", []),
         "data_gaps": retrieved.pop("data_gaps", []),
