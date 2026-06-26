@@ -78,6 +78,14 @@ class AssetInput:
     recent_capital_raise: str = "none"
     gulf_western_investor_linked: bool = False
 
+    # Bankability Constraints — retrieved from public sources, not scored
+    # These are binary flags surfaced as constraints, not dimensions
+    environmental_permit_status: str = "unknown"   # "permitted" | "in_progress" | "not_filed" | "unknown"
+    esia_completed: bool = False                    # Environmental & Social Impact Assessment on public record
+    community_consultation_evidence: str = "none"  # "documented" | "partial" | "none"
+    social_licence_disputes: bool = False           # Active community/NGO opposition on record
+    water_licence_status: str = "unknown"           # "permitted" | "pending" | "not_filed" | "unknown"
+
 
 @dataclass
 class EvidenceField:
@@ -532,5 +540,6 @@ def score_asset(inp: AssetInput, rules_version: str = None) -> ScoringResult:
         envelope_hash=fingerprint,
         evidence_completeness_score=evidence_completeness,
     )
+
 
 
