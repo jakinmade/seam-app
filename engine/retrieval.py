@@ -1,14 +1,12 @@
 """
 SEAM Data Retrieval Layer
-Sprint 3 — Claude retrieves live public source data for a named asset.
+Session 1 — Operator-aware retrieval. Two-phase search.
 
-User enters an asset name and jurisdiction.
-Claude searches EITI, Fraser, World Bank, cadastre, ASX/TSX filings.
-Extracts the relevant fields.
-Returns a populated AssetInput ready for the scoring engine.
+Phase 1: Identify the operator, aliases and listed vehicle for the named asset.
+Phase 2: Use operator + asset name together to retrieve all SEAM scoring fields.
 
-This is the layer that makes SEAM autonomous.
-No manual data entry. No pre-loaded assets.
+KCM searches for "Konkola Copper Mines" AND "Vedanta Resources Zambia".
+That unlocks annual reports, exchange filings, EITI records, DFI data.
 """
 
 import json
@@ -19,49 +17,88 @@ from engine.scoring import AssetInput
 
 
 # ---------------------------------------------------------------------------
-# RETRIEVAL SYSTEM PROMPT
+# PHASE 1 — OPERATOR IDENTIFICATION
+# ---------------------------------------------------------------------------
+
+OPERATOR_SYSTEM_PROMPT = """You are a mining intelligence agent. Your job is to identify the operator and key identifiers for a named mining asset.
+
+Search public sources and return structured JSON only. No preamble. No explanation.
+
+Return exactly this JSON structure:
+{
+  "asset_name_official": "the full official name of the asset",
+  "operator": "primary operator / management company name",
+  "operator_aliases": ["any alternative names or previous names for the operator"],
+  "majority_owner": "majority ownership entity",
+  "minority_owners": ["list of known minority owners"],
+  "listed_vehicle": "ASX/TSX/AIM/LSE ticker if listed, else null",
+  "exchange": "exchange name if listed, else null",
+  "commodity_primary": "primary commodity produced or being explored for",
+  "commodity_secondary": ["secondary commodities if any"],
+  "asset_stage": "producing or development or prefeasibility or exploration",
+  "province_region": "province or region within the jurisdiction",
+  "operator_hq_country": "country where operator is headquartered",
+  "known_dfi_links": ["any known DFI relationships e.g. IFC, AfDB, BII, OPIC/DFC"],
+  "search_confidence": "high or medium or low"
+}
+
+If any field cannot be found, set it to null or empty list. Never invent data."""
+
+OPERATOR_USER_PROMPT = """Identify the operator and key identifiers for this mining asset.
+
+Asset name: {asset_name}
+Jurisdiction: {jurisdiction}
+Additional context: {context}
+
+Search for the asset name, any known aliases, and the operating company. For well-known assets, check Wikipedia, company websites, exchange filings, and mining databases."""
+
+
+# ---------------------------------------------------------------------------
+# PHASE 2 — FULL FIELD RETRIEVAL
 # ---------------------------------------------------------------------------
 
 RETRIEVAL_SYSTEM_PROMPT = """You are the SEAM Data Retrieval Agent for African mining assets.
 
-YOUR JOB:
-Search public sources and extract the specific data fields required to score a mining asset under the SEAM Investment Readiness Methodology v1.0.
+You have been given the asset name AND the operator name. Search for both together.
+For KCM, search "Konkola Copper Mines" AND "Vedanta Resources Zambia".
+For Lumwana, search "Lumwana Mine" AND "Barrick Gold Zambia".
+This doubles the evidence you can find.
 
 SOURCES TO SEARCH (in priority order):
 1. EITI country reports (eiti.org) — revenues, beneficial ownership, payment data, compliance status
 2. Fraser Institute Annual Survey (fraserinstitute.org) — Investment Attractiveness Index by jurisdiction
 3. World Bank Governance Indicators (info.worldbank.org/governance/wgi) — Rule of Law, Regulatory Quality percentiles
-4. Exchange filings — ASX, TSX, AIM, LSE regulatory announcements, annual reports, investor presentations
-5. S&P Capital IQ public data — company profiles, capital structure, investor lists (public portions)
-6. Refinitiv/LSEG public data — ownership, DFI linkages, capital raises
-7. ICIJ Offshore Leaks database (offshoreleaks.icij.org) — beneficial ownership, PEP screening
-8. Government cadastre portals — licence status, holder name, compliance filings
-9. USGS mineral resources data (mrdata.usgs.gov) — resource estimates, commodity classification
-10. World Bank Projects database (projects.worldbank.org) — DFI engagement, active projects
-11. African Development Bank project database (afdb.org) — DFI engagement in jurisdiction
-12. Lobito Corridor project registry (where applicable) — infrastructure eligibility
-13. Mining ministry and gazette publications — local content compliance, LOCAS filings
-14. Financial press and newswires — capital raises, DFI announcements, regulatory changes, disputes
+4. Exchange filings (ASX, TSX, AIM, LSE) — annual reports, regulatory announcements, resource estimates
+5. Operator annual reports and investor presentations — production data, capital structure, DFI relationships
+6. ICIJ Offshore Leaks database (offshoreleaks.icij.org) — beneficial ownership, PEP screening
+7. Government cadastre portals — licence status, holder name, compliance filings
+8. USGS mineral resources data (mrdata.usgs.gov) — resource estimates, commodity data
+9. World Bank Projects database (projects.worldbank.org) — DFI engagement
+10. African Development Bank database (afdb.org) — DFI engagement in jurisdiction
+11. Lobito Corridor project registry — infrastructure eligibility for Copperbelt/DRC assets
+12. Mining ministry and gazette publications — local content compliance, LOCAS filings
+13. Financial press and newswires — capital raises, disputes, regulatory changes
 
 RETRIEVAL RULES:
-- Search for each data field systematically
-- Record what you found, where you found it, and when
-- If a field cannot be found in public sources, set it to the default/unknown value and flag it as a data gap
-- Never invent data. Never estimate. If not found, say not found.
-- Company-submitted data is supplementary only — never use as sole source for any dimension
-- Prefer recent data (within 3 years) over older data
+- Search asset name AND operator name. Use both.
+- Jurisdiction-level fields (Fraser, WB, EITI country status): retrieve for the jurisdiction.
+- Asset-level fields (resource estimates, production, licence, capital raises): retrieve for this specific asset and operator.
+- Record every source. Record what was found and when.
+- If a field cannot be found, set to null/default and add to data_gaps.
+- Never invent data. Never estimate. Not found means not found.
+- Prefer data from the last 3 years. Flag older data.
 
 JURISDICTION CODES:
-ZMB = Zambia, DRC = Democratic Republic of Congo, BWA = Botswana,
-GHA = Ghana, TZA = Tanzania, NAM = Namibia, GIN = Guinea,
-ZWE = Zimbabwe, MOZ = Mozambique
+ZMB=Zambia, COD=DRC, BWA=Botswana, GHA=Ghana, TZA=Tanzania,
+NAM=Namibia, GIN=Guinea, ZWE=Zimbabwe, MOZ=Mozambique, CIV=Cote d'Ivoire
 
-Return your response as a JSON object with exactly this structure:
+Return exactly this JSON. No preamble. No markdown. No explanation:
 {
-  "asset_id": "auto-generated e.g. ZMB-AUTO-001",
-  "asset_name": "full official name of the asset",
+  "asset_id": "e.g. ZMB-KCM-001",
+  "asset_name": "full official asset name",
+  "operator": "operator name",
   "jurisdiction": "country name",
-  "jurisdiction_code": "3-letter code",
+  "jurisdiction_code": "3-letter ISO code",
   "commodity": "primary commodity",
   "province": "province or region",
 
@@ -107,74 +144,74 @@ Return your response as a JSON object with exactly this structure:
   "recent_capital_raise": "u18m" or "18_36m" or "none",
   "gulf_western_investor_linked": <true/false>,
 
+  "operator_profile": {
+    "operator": "operator name",
+    "hq_country": "country",
+    "listed_on": "exchange or null",
+    "ticker": "ticker or null",
+    "environmental_incidents": <true/false>,
+    "labour_disputes_last_5y": <true/false>,
+    "litigation_active": <true/false>,
+    "dfi_relationships": ["list of DFIs with active relationships"]
+  },
+
   "sources_consulted": [
-    {"field": "field_name", "source": "source name", "url": "url", "retrieved": "date", "value_found": "what was found"}
+    {"field": "field_name", "source": "source name", "url": "url or null", "retrieved": "YYYY-MM-DD", "value_found": "what was found"}
   ],
-  "data_gaps": ["list of fields not found in public sources"]
-}
-
-Return only the JSON object. No preamble. No markdown fences. No explanation."""
+  "data_gaps": ["fields not found in public sources"]
+}"""
 
 
-RETRIEVAL_USER_PROMPT = """Retrieve public data for the following mining asset and populate all SEAM scoring fields.
+RETRIEVAL_USER_PROMPT = """Retrieve public data for this mining asset.
 
 Asset name: {asset_name}
+Operator: {operator}
+Operator aliases: {operator_aliases}
 Jurisdiction: {jurisdiction}
+Commodity (if known): {commodity}
+Listed vehicle: {listed_vehicle}
 Additional context: {context}
 
-Search systematically across all required sources. For jurisdiction-level data (Fraser, World Bank WGI, EITI country status) retrieve the most recent available values for {jurisdiction}.
+Search for BOTH the asset name AND the operator name. Use the operator's exchange filings, annual reports and investor presentations as primary sources for production data, resource estimates and capital structure. Use EITI and World Bank for jurisdiction-level governance data.
 
-For asset-level data (resource estimates, licence status, capital raises, DFI engagement) search specifically for this asset and operator.
-
-Flag every field where public data was not found."""
+Return only valid JSON matching the schema exactly."""
 
 
 # ---------------------------------------------------------------------------
 # HELPERS
 # ---------------------------------------------------------------------------
 
-def _extract_json_from_text(text: str) -> str:
-    """
-    Strip markdown fences and find the outermost JSON object.
-    Handles cases where Claude wraps JSON in ```json ... ``` or adds preamble.
-    """
+def _extract_json(text: str) -> str:
     text = text.strip()
-
-    # Strip markdown fences
     if "```" in text:
         parts = text.split("```")
-        # parts[1] is the content between the first pair of fences
-        for part in parts[1::2]:  # every odd part is inside fences
+        for part in parts[1::2]:
             candidate = part.strip()
             if candidate.startswith("json"):
                 candidate = candidate[4:].strip()
             if candidate.startswith("{"):
                 return candidate
-        # fallback: try the whole stripped version
-        text = parts[1].strip()
-        if text.startswith("json"):
-            text = text[4:].strip()
-        return text
-
-    # Find the first { and last } to extract the JSON object
     start = text.find("{")
     end = text.rfind("}")
     if start != -1 and end != -1 and end > start:
         return text[start:end + 1]
-
     return text
 
 
-def _call_claude(api_key: str, payload_dict: dict) -> str:
-    """
-    POST to Claude API and return the final text content block.
-    Handles multi-turn tool use by taking the last text block in the response.
-    """
-    payload = json.dumps(payload_dict).encode("utf-8")
+def _call_api(api_key: str, system: str, user: str, use_search: bool = True) -> str:
+    payload = {
+        "model": "claude-sonnet-4-6",
+        "max_tokens": 4000,
+        "temperature": 0,
+        "system": system,
+        "messages": [{"role": "user", "content": user}]
+    }
+    if use_search:
+        payload["tools"] = [{"type": "web_search_20250305", "name": "web_search"}]
 
     req = urllib.request.Request(
         "https://api.anthropic.com/v1/messages",
-        data=payload,
+        data=json.dumps(payload).encode("utf-8"),
         headers={
             "Content-Type": "application/json",
             "anthropic-version": "2023-06-01",
@@ -189,90 +226,124 @@ def _call_claude(api_key: str, payload_dict: dict) -> str:
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="replace")
         try:
-            err = json.loads(body)
-            msg = err.get("error", {}).get("message", body)
+            msg = json.loads(body).get("error", {}).get("message", body)
         except Exception:
             msg = body
-        raise RuntimeError(f"Anthropic API error {e.code}: {msg}") from None
+        raise RuntimeError(f"API error {e.code}: {msg}") from None
 
-    # Collect ALL text blocks; take the last non-empty one.
-    # After web search tool use, Claude emits tool_use + tool_result blocks
-    # then a final text block with the actual answer.
     text_blocks = [
-        block["text"].strip()
-        for block in data.get("content", [])
-        if block.get("type") == "text" and block.get("text", "").strip()
+        b["text"].strip()
+        for b in data.get("content", [])
+        if b.get("type") == "text" and b.get("text", "").strip()
     ]
-
     if not text_blocks:
-        raise ValueError(
-            f"No text content in Claude response. stop_reason={data.get('stop_reason')} "
-            f"blocks={[b.get('type') for b in data.get('content', [])]}"
-        )
-
+        raise ValueError(f"No text in response. stop_reason={data.get('stop_reason')}")
     return text_blocks[-1]
 
 
+def _parse_json(raw: str) -> dict:
+    raw = _extract_json(raw)
+    return json.loads(raw)
+
+
 # ---------------------------------------------------------------------------
-# RETRIEVAL ENGINE
+# PHASE 1 — OPERATOR IDENTIFICATION
 # ---------------------------------------------------------------------------
 
-def retrieve_asset_data(asset_name: str, jurisdiction: str, context: str = "") -> tuple[AssetInput, dict]:
+def _identify_operator(api_key: str, asset_name: str, jurisdiction: str, context: str) -> dict:
+    """Phase 1: identify operator, commodity, aliases before full retrieval."""
+    prompt = OPERATOR_USER_PROMPT.format(
+        asset_name=asset_name,
+        jurisdiction=jurisdiction,
+        context=context or "None provided."
+    )
+    try:
+        raw = _call_api(api_key, OPERATOR_SYSTEM_PROMPT, prompt, use_search=True)
+        return _parse_json(raw)
+    except Exception:
+        # Non-fatal — Phase 2 proceeds with asset name only
+        return {
+            "asset_name_official": asset_name,
+            "operator": "",
+            "operator_aliases": [],
+            "commodity_primary": "",
+            "listed_vehicle": None,
+            "exchange": None,
+            "search_confidence": "low"
+        }
+
+
+# ---------------------------------------------------------------------------
+# PHASE 2 — FULL FIELD RETRIEVAL
+# ---------------------------------------------------------------------------
+
+def _retrieve_fields(api_key: str, asset_name: str, jurisdiction: str,
+                     context: str, op: dict) -> dict:
+    """Phase 2: full field retrieval using operator context from Phase 1."""
+    operator = op.get("operator") or ""
+    aliases   = ", ".join(op.get("operator_aliases") or []) or "none"
+    commodity = op.get("commodity_primary") or "unknown"
+    listed    = op.get("listed_vehicle") or "unknown"
+
+    prompt = RETRIEVAL_USER_PROMPT.format(
+        asset_name=op.get("asset_name_official") or asset_name,
+        operator=operator or "unknown — search for operator",
+        operator_aliases=aliases,
+        jurisdiction=jurisdiction,
+        commodity=commodity,
+        listed_vehicle=listed,
+        context=context or "None provided."
+    )
+
+    try:
+        raw = _call_api(api_key, RETRIEVAL_SYSTEM_PROMPT, prompt, use_search=True)
+        return _parse_json(raw)
+    except json.JSONDecodeError:
+        # Retry without web search tool
+        raw = _call_api(api_key, RETRIEVAL_SYSTEM_PROMPT, prompt, use_search=False)
+        return _parse_json(raw)
+
+
+# ---------------------------------------------------------------------------
+# MAIN ENTRY POINT
+# ---------------------------------------------------------------------------
+
+def retrieve_asset_data(asset_name: str, jurisdiction: str,
+                        context: str = "") -> tuple[AssetInput, dict]:
     """
-    Call Claude with web search to retrieve live public data for a named asset.
+    Two-phase operator-aware retrieval.
+    Phase 1: identify operator, commodity, listed vehicle.
+    Phase 2: retrieve all SEAM scoring fields using operator + asset name.
     Returns (AssetInput, sources_metadata).
     """
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
 
-    prompt = RETRIEVAL_USER_PROMPT.format(
-        asset_name=asset_name,
-        jurisdiction=jurisdiction,
-        context=context or "No additional context provided."
-    )
-
     if not api_key:
         return _mock_retrieval(asset_name, jurisdiction), {"mock": True}
 
-    # First attempt: with web search
-    payload = {
-        "model": "claude-sonnet-4-6",
-        "max_tokens": 4000,
-        "system": RETRIEVAL_SYSTEM_PROMPT,
-        "tools": [{"type": "web_search_20250305", "name": "web_search"}],
-        "messages": [{"role": "user", "content": prompt}]
-    }
-
     try:
-        raw = _call_claude(api_key, payload)
+        # Phase 1
+        op = _identify_operator(api_key, asset_name, jurisdiction, context)
+
+        # Phase 2
+        retrieved = _retrieve_fields(api_key, asset_name, jurisdiction, context, op)
+
     except RuntimeError as e:
-        # API-level error (e.g. out of credits, auth failure) — fall back to mock
-        mock_input = _mock_retrieval(asset_name, jurisdiction)
-        return mock_input, {"mock": True, "api_error": str(e)}
+        return _mock_retrieval(asset_name, jurisdiction), {
+            "mock": True, "api_error": str(e)
+        }
+    except Exception as e:
+        return _mock_retrieval(asset_name, jurisdiction), {
+            "mock": True, "api_error": f"Retrieval failed: {str(e)}"
+        }
 
-    raw = _extract_json_from_text(raw)
-
-    # If still not parseable, retry without web search tool
-    # (sometimes Claude adds preamble when web search is enabled)
-    try:
-        retrieved = json.loads(raw)
-    except json.JSONDecodeError:
-        try:
-            payload_no_search = {
-                "model": "claude-sonnet-4-6",
-                "max_tokens": 4000,
-                "system": RETRIEVAL_SYSTEM_PROMPT,
-                "messages": [{"role": "user", "content": prompt}]
-            }
-            raw = _call_claude(api_key, payload_no_search)
-            raw = _extract_json_from_text(raw)
-            retrieved = json.loads(raw)
-        except (RuntimeError, json.JSONDecodeError) as e:
-            mock_input = _mock_retrieval(asset_name, jurisdiction)
-            return mock_input, {"mock": True, "api_error": str(e)}
-
+    # Merge operator profile from Phase 1 into sources metadata
     sources = {
         "sources_consulted": retrieved.pop("sources_consulted", []),
-        "data_gaps": retrieved.pop("data_gaps", []),
+        "data_gaps":         retrieved.pop("data_gaps", []),
+        "operator_profile":  retrieved.pop("operator_profile",
+                                           op.get("operator_profile", {})),
+        "phase1_operator":   op,
         "mock": False
     }
 
@@ -280,8 +351,11 @@ def retrieve_asset_data(asset_name: str, jurisdiction: str, context: str = "") -
     return asset_input, sources
 
 
+# ---------------------------------------------------------------------------
+# DICT TO AssetInput
+# ---------------------------------------------------------------------------
+
 def _dict_to_asset_input(d: dict) -> AssetInput:
-    """Convert retrieved dict to AssetInput dataclass."""
     return AssetInput(
         asset_id=d.get("asset_id", "AUTO-001"),
         asset_name=d.get("asset_name", "Unknown Asset"),
@@ -334,21 +408,25 @@ def _dict_to_asset_input(d: dict) -> AssetInput:
     )
 
 
-def _mock_retrieval(asset_name: str, jurisdiction: str) -> AssetInput:
-    """Mock retrieval for testing without API key. Returns conservative defaults."""
-    import hashlib
-    uid = hashlib.md5(asset_name.encode()).hexdigest()[:6].upper()
+# ---------------------------------------------------------------------------
+# MOCK
+# ---------------------------------------------------------------------------
 
+def _mock_retrieval(asset_name: str, jurisdiction: str) -> AssetInput:
+    import hashlib
+    uid    = hashlib.md5(asset_name.encode()).hexdigest()[:6].upper()
     jur_map = {
-        "zambia": ("ZMB", "Copperbelt"),
-        "ghana": ("GHA", "Ashanti"),
-        "tanzania": ("TZA", "Mwanza"),
-        "botswana": ("BWA", "Central"),
-        "drc": ("DRC", "Katanga"),
-        "namibia": ("NAM", "Erongo"),
+        "zambia":    ("ZMB", "Copperbelt"),
+        "ghana":     ("GHA", "Ashanti"),
+        "tanzania":  ("TZA", "Mwanza"),
+        "botswana":  ("BWA", "Central"),
+        "drc":       ("COD", "Katanga"),
+        "namibia":   ("NAM", "Erongo"),
+        "guinea":    ("GIN", "Boke"),
+        "zimbabwe":  ("ZWE", "Matabeleland"),
+        "mozambique":("MOZ", "Tete"),
     }
     jcode, province = jur_map.get(jurisdiction.lower(), ("ZMB", "Unknown"))
-
     return AssetInput(
         asset_id=f"{jcode}-AUTO-{uid}",
         asset_name=asset_name,
@@ -360,4 +438,3 @@ def _mock_retrieval(asset_name: str, jurisdiction: str) -> AssetInput:
         wb_rule_of_law_percentile=None,
         wb_regulatory_quality_percentile=None,
     )
-
