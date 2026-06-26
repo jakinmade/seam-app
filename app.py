@@ -148,13 +148,21 @@ if "snippet"      not in st.session_state: st.session_state.snippet = None
 
 def vc(verdict): return VERDICT_COLOUR.get(verdict, "#333")
 
-def render_banner(score, verdict):
+def render_banner(score, verdict, evidence_completeness=None):
+    ec_html = ""
+    if evidence_completeness is not None:
+        ec_html = f"""
+      <div class="ban-m" style="background:#1e2e40;border-left:1px solid #2a3f55;">
+        <div class="ban-lbl">Evidence Completeness</div>
+        <div><span class="ban-score" style="color:#7eb8d4;">{evidence_completeness}</span><span class="ban-denom"> / 100</span></div>
+      </div>"""
     st.markdown(f"""
     <div class="banner">
       <div class="ban-l">
-        <div class="ban-lbl">Investment Readiness Score</div>
+        <div class="ban-lbl">Investment Readiness</div>
         <div><span class="ban-score">{score}</span><span class="ban-denom"> / 100</span></div>
       </div>
+      {ec_html}
       <div class="ban-r" style="background:{vc(verdict)};">
         <div class="ban-lbl" style="color:rgba(255,255,255,0.7);">Verdict</div>
         <div class="ban-verdict">{verdict}</div>
@@ -289,7 +297,7 @@ st.markdown("---")
 if page == "Assessment":
 
     st.markdown("**Before committing capital to African mining due diligence, know what the data actually says.**")
-    st.caption("Enter an asset below. SEAM retrieves public data, scores six dimensions deterministically, and surfaces what you don't know.")
+    st.caption("Enter an asset below. SEAM locates public evidence, scores six dimensions against a fixed methodology, and surfaces what the score alone does not show.")
     st.markdown("")
 
     mode = st.radio("Mode", ["Live retrieval", "Pre-loaded asset"], horizontal=True)
@@ -323,21 +331,21 @@ if page == "Assessment":
             if use_preloaded:
                 asset_input = ALL_ASSETS[use_preloaded]
             else:
-                with st.status("Retrieving public data...", expanded=True) as s:
-                    st.write(f"Searching: {asset_name_input}, {jurisdiction_input}")
-                    st.write("EITI, Fraser Institute, World Bank WGI, exchange filings, cadastre...")
+                with st.status("Locating asset records...", expanded=True) as s:
+                    st.write(f"Asset: {asset_name_input} | Jurisdiction: {jurisdiction_input}")
+                    st.write("Consulting: EITI, Fraser Institute, World Bank WGI, exchange filings, government cadastre, USGS")
                     asset_input, sources_meta = retrieve_asset_data(asset_name_input, jurisdiction_input, context_input)
                     if sources_meta.get("mock"):
                         if sources_meta.get("api_error"):
                             st.warning(f"Live data retrieval unavailable: {sources_meta['api_error']}. Showing conservative defaults — score is indicative only.")
                         else:
                             st.write("Live retrieval active in deployed app with ANTHROPIC_API_KEY.")
-                    s.update(label="Data retrieved.", state="complete")
+                    s.update(label="Evidence located. Building assessment.", state="complete")
 
             # STEP 2 — Score
             with st.status("Scoring engine...", expanded=False) as s:
                 result = score_asset(asset_input)
-                s.update(label=f"Score: {result.investment_readiness_score}/100 — {result.verdict}", state="complete")
+                s.update(label=f"Score: {result.investment_readiness_score}/100 | Evidence: {result.evidence_completeness_score}/100 | {result.verdict}", state="complete")
 
             # STEP 3 — Snippet (always free)
             snippet = generate_snippet(result)
@@ -390,7 +398,7 @@ if page == "Assessment":
 
         st.markdown("---")
         # ── FULL REPORT ───────────────────────────────────────────────
-        render_banner(result.investment_readiness_score, result.verdict)
+        render_banner(result.investment_readiness_score, result.verdict, getattr(result, "evidence_completeness_score", None))
 
         tab1, tab2, tab3, tab4 = st.tabs([
             "Executive Summary", "Dimension Findings",
@@ -434,7 +442,7 @@ if page == "Assessment":
         intel   = st.session_state.last_intel
         snippet = st.session_state.snippet
         if st.session_state.pdf_path:
-            render_banner(result.investment_readiness_score, result.verdict)
+            render_banner(result.investment_readiness_score, result.verdict, getattr(result, "evidence_completeness_score", None))
             dl_button(st.session_state.pdf_path, result.asset_id)
 
     else:
@@ -522,4 +530,5 @@ They do not constitute due diligence and are not a substitute for independent te
 Every investor must conduct their own assessment appropriate to their mandate, jurisdiction and risk appetite.
 Methodology SEAM-M-v1.0 | Rules SEAM-R-v1.0 | akinmade.co.uk | CONFIDENTIAL
 </div>""", unsafe_allow_html=True)
+
 
