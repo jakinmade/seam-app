@@ -85,7 +85,16 @@ Do not explain the methodology. State the facts about this specific assessment.
 
 ---
 
-BLOCK 5 — VERDICT AND NEXT ACTION
+BLOCK 5 — COMMODITY CONTEXT
+This is context only. It does not affect the score or verdict.
+State: commodity name, 12-month price trend, whether it is on a critical minerals list, primary demand driver.
+Two sentences maximum. Factual. No opinion.
+If commodity is unknown, state: "Commodity not identified during retrieval."
+Critical mineral lists: EU Critical Raw Materials Act 2024, US DOE Critical Materials 2023, UK Critical Minerals List 2023.
+
+---
+
+BLOCK 6 — VERDICT AND NEXT ACTION
 Two to four sentences. Decision-first.
 First sentence: verdict and recommended action.
 Remaining sentences: material conditions or risks relevant to that action only.
@@ -139,7 +148,17 @@ Return exactly this JSON. No preamble. No markdown. No explanation:
     "D5": {"finding": "...", "evidence_confidence": "High|Medium|Low"},
     "D6": {"finding": "...", "evidence_confidence": "High|Medium|Low"}
   },
-  "verdict_section": "..."
+  "verdict_section": "...",
+  "commodity_context": {
+    "commodity": "primary commodity name",
+    "outlook": "Bullish or Neutral or Bearish",
+    "outlook_rationale": "one sentence — why, from public data",
+    "critical_mineral": true or false,
+    "critical_mineral_lists": ["EU CRM", "US DOE", "UK CML"],
+    "lobito_corridor_relevant": true or false,
+    "price_trend_12m": "Rising or Stable or Falling",
+    "demand_driver": "one sentence on primary demand driver"
+  }
 }"""
 
 
@@ -363,11 +382,22 @@ def _mock_intelligence(prompt: str) -> dict:
             "D5": {"finding": "[Live in Streamlit]", "evidence_confidence": "Low"},
             "D6": {"finding": "[Live in Streamlit]", "evidence_confidence": "Low"},
         },
-        "verdict_section": f"Verdict: {verdict}. [Live in Streamlit]"
+        "verdict_section": f"Verdict: {verdict}. [Live in Streamlit]",
+        "commodity_context": {
+            "commodity": "Unknown",
+            "outlook": "Neutral",
+            "outlook_rationale": "Live in Streamlit",
+            "critical_mineral": False,
+            "critical_mineral_lists": [],
+            "lobito_corridor_relevant": False,
+            "price_trend_12m": "Stable",
+            "demand_driver": "Live in Streamlit"
+        }
     }
 
 
 def generate_intelligence(result: ScoringResult, inp: AssetInput) -> dict:
     prompt = build_prompt(result, inp)
     return call_intelligence_engine(prompt)
+
 
