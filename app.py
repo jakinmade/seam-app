@@ -418,9 +418,9 @@ if page == "Assessment":
         # ── FULL REPORT ───────────────────────────────────────────────
         render_banner(result.investment_readiness_score, result.verdict, getattr(result, "evidence_completeness_score", None))
 
-        tab1, tab2, tab3, tab4 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
             "Investment Decision", "Dimension Detail",
-            "Material Unknowns", "Verdict & Next Action"
+            "Material Unknowns", "Verdict & Next Action", "Commodity Context"
         ])
 
         with tab1:
@@ -477,6 +477,30 @@ if page == "Assessment":
             </div>""", unsafe_allow_html=True)
             st.markdown(intel.get("verdict_section",""))
             st.markdown(f'<div class="next-action"><div class="na-lbl">Next Action</div><div class="na-txt">{result.next_action}</div></div>', unsafe_allow_html=True)
+
+        with tab5:
+            cc = intel.get("commodity_context", {})
+            if cc and cc.get("commodity") and cc.get("commodity") != "Unknown":
+                AMBER_COL = "#C8962E"
+                NAVY_COL  = "#0B1929"
+                outlook_col = {"Bullish":"#1A7A3A","Neutral":"#B8860B","Bearish":"#CC0000"}.get(cc.get("outlook","Neutral"),"#888")
+                st.markdown(f"### {cc.get('commodity','')}")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Outlook", cc.get("outlook",""))
+                with col2:
+                    st.metric("12m Price Trend", cc.get("price_trend_12m",""))
+                with col3:
+                    st.metric("Critical Mineral", "Yes" if cc.get("critical_mineral") else "No")
+                if cc.get("critical_mineral_lists"):
+                    st.caption(f"Listed on: {', '.join(cc['critical_mineral_lists'])}")
+                if cc.get("lobito_corridor_relevant"):
+                    st.info("Lobito Corridor eligible asset.")
+                st.markdown(f"**Market context:** {cc.get('outlook_rationale','')}")
+                st.markdown(f"**Demand driver:** {cc.get('demand_driver','')}")
+                st.caption("Commodity context does not affect the Investment Readiness Score or Verdict.")
+            else:
+                st.info("Commodity not identified during retrieval. Run assessment with additional context to populate this panel.")
 
         st.markdown("")
         dl_button(pdf_path, result.asset_id)
@@ -540,7 +564,7 @@ if page == "Assessment":
 
 elif page == "SEAM Watch":
     st.markdown("### SEAM Watch")
-    st.caption("Assets scored in this session. Run the same asset again to detect changes.")
+    st.caption("Run any asset multiple times to track changes. Decision Stability shows direction of travel.")
 
     watch = st.session_state.watch_list
     if not watch:
@@ -551,7 +575,25 @@ elif page == "SEAM Watch":
             alert  = entry.get("alert")
             history = entry.get("history", [])
 
+            stability = entry.get("stability", {})
+            stab_label = stability.get("label", "First assessment")
+            stab_col = {"Improving": "#1A7A3A", "Deteriorating": "#CC0000",
+                        "Stable": "#B8860B", "First assessment": "#888"}.get(stab_label, "#888")
+            stab_delta = stability.get("delta")
+            delta_str = f" ({stab_delta:+.1f}pts)" if stab_delta is not None else ""
+
             with st.expander(f"{latest.get('asset_name',asset_id)}  —  {latest.get('score','?')}/100  —  {latest.get('verdict','?')}", expanded=True):
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    st.markdown(f"**Score:** {latest.get('score','?')}/100")
+                with c2:
+                    st.markdown(f"**Evidence:** {latest.get('evidence_completeness', '?')}/100")
+                with c3:
+                    st.markdown(
+                        f'**Stability:** <span style="color:{stab_col};font-weight:bold;">{stab_label}{delta_str}</span>',
+                        unsafe_allow_html=True
+                    )
+                st.markdown("")
                 if alert and alert.get("fires"):
                     render_watch_alert(alert, latest.get("asset_name", asset_id))
                 else:
@@ -603,6 +645,7 @@ They do not constitute due diligence and are not a substitute for independent te
 Every investor must conduct their own assessment appropriate to their mandate, jurisdiction and risk appetite.
 Methodology SEAM-M-v1.0 | Rules SEAM-R-v1.0 | akinmade.co.uk | CONFIDENTIAL
 </div>""", unsafe_allow_html=True)
+
 
 
 
