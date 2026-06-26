@@ -81,6 +81,7 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
     critical_risks = intel.get("critical_risks", [])
     drivers        = intel.get("investment_drivers", {})
     ev_summary     = intel.get("evidence_summary", "")
+    commodity_ctx  = intel.get("commodity_context", {})
     intel_items    = intel.get("investor_intelligence", [])
     verdict_text   = intel.get("verdict_section", "")
 
@@ -322,6 +323,52 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
       </table>
     </div>"""
 
+    # --- Commodity Context panel ---
+    def _outlook_colour(outlook):
+        return {"Bullish": "#1A7A3A", "Neutral": "#B8860B", "Bearish": "#CC0000"}.get(outlook, "#888")
+
+    def _trend_arrow(trend):
+        return {"Rising": "&#9650;", "Stable": "&#9654;", "Falling": "&#9660;"}.get(trend, "")
+
+    commodity_panel = ""
+    if commodity_ctx and commodity_ctx.get("commodity") and commodity_ctx.get("commodity") != "Unknown":
+        c = commodity_ctx
+        outlook_col = _outlook_colour(c.get("outlook", "Neutral"))
+        trend_arrow = _trend_arrow(c.get("price_trend_12m", "Stable"))
+        crit_html = ""
+        if c.get("critical_mineral"):
+            lists = c.get("critical_mineral_lists", [])
+            crit_html = f'''<span style="display:inline-block;padding:1px 7px;border-radius:8px;background:{AMBER};color:white;font-size:9px;font-weight:bold;margin-left:6px;">Critical Mineral</span>'''
+            if lists:
+                crit_html += f'''<span style="font-size:9px;color:#888;margin-left:6px;">{", ".join(lists)}</span>'''
+        lobito_html = ""
+        if c.get("lobito_corridor_relevant"):
+            lobito_html = '''<span style="display:inline-block;padding:1px 7px;border-radius:8px;background:#1A5FA8;color:white;font-size:9px;font-weight:bold;margin-left:6px;">Lobito Corridor</span>'''
+
+        commodity_panel = f'''
+        <h2>Commodity Context</h2>
+        <table style="width:100%;border-collapse:collapse;background:#f9f6f0;border:1px solid #e8e0d0;border-radius:3px;">
+          <tr>
+            <td style="padding:12px 16px;width:25%;border-right:1px solid #e8e0d0;vertical-align:middle;">
+              <div style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;">Commodity</div>
+              <div style="font-size:16px;font-weight:bold;color:{NAVY};">{c.get("commodity","")}</div>
+              {crit_html}{lobito_html}
+            </td>
+            <td style="padding:12px 16px;width:20%;border-right:1px solid #e8e0d0;vertical-align:middle;">
+              <div style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;">Outlook</div>
+              <div style="font-size:14px;font-weight:bold;color:{outlook_col};">{c.get("outlook","")}</div>
+              <div style="font-size:9px;color:#888;margin-top:2px;">{trend_arrow} {c.get("price_trend_12m","")}</div>
+            </td>
+            <td style="padding:12px 16px;vertical-align:middle;">
+              <div style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;">Context</div>
+              <div style="font-size:10px;color:#333;line-height:1.5;">{c.get("outlook_rationale","")}</div>
+              <div style="font-size:10px;color:#555;margin-top:4px;">{c.get("demand_driver","")}</div>
+            </td>
+          </tr>
+        </table>
+        <div style="font-size:9px;color:#aaa;margin-top:4px;font-style:italic;">Commodity context is provided for reference only. It does not affect the Investment Readiness Score or Verdict.</div>
+        '''
+
     html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -426,6 +473,9 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
   <div style="font-size:12px;font-weight:bold;color:{NAVY};">{result.next_action}</div>
 </div>
 
+<!-- COMMODITY CONTEXT -->
+{commodity_panel}
+
 <!-- EVIDENCE SUMMARY -->
 <h2>Evidence Summary</h2>
 <div style="font-size:11px;color:#444;line-height:1.6;margin-bottom:12px;">{ev_summary}</div>
@@ -462,3 +512,4 @@ def generate_pdf(result: ScoringResult, intel: dict, asset_input, output_dir: st
     output_path = os.path.join(output_dir, f"{safe_name}_SEAM_Report.pdf")
     HTML(string=html).write_pdf(output_path)
     return output_path
+
