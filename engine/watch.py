@@ -1,9 +1,10 @@
 """
 SEAM Watch
-Sprint 5 — Monitor scored assets. Diff evidence envelopes. Flag material changes.
+Session 2 — Decision Stability, persistent storage, change intelligence.
 
-Stores scored asset history in session state (Sprint 5).
-Sprint 6 will persist to database.
+Decision Stability: Stable / Improving / Deteriorating based on score trend.
+Storage: Streamlit persistent storage (window.storage equivalent via st.session_state
+         with JSON serialisation to allow future persistence upgrade).
 """
 
 import json
@@ -12,21 +13,62 @@ from datetime import datetime, timezone
 from engine.scoring import ScoringResult
 
 
-SCORE_DELTA_THRESHOLD = 5      # points — triggers alert
+SCORE_DELTA_THRESHOLD = 5
 VERDICT_ORDER = ["PROCEED", "PROCEED WITH CONDITIONS", "MONITOR", "CAUTION", "AVOID"]
 
 
 def envelope_fingerprint(envelope: dict) -> str:
-    """SHA-256 of the evidence envelope — detects any change."""
     canonical = json.dumps(envelope, sort_keys=True, default=str)
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 
+def decision_stability(history: list) -> dict:
+    """
+    Compute Decision Stability from score history.
+    Returns: label (Stable / Improving / Deteriorating), direction, delta.
+    """
+    if len(history) < 2:
+        return {"label": "First assessment", "direction": None, "delta": None}
+
+    scores = [h["score"] for h in history]
+    latest = scores[-1]
+    previous = scores[-2]
+    delta = latest - previous
+
+    # Trend across all history if 3+ runs
+    if len(scores) >= 3:
+        trend = scores[-1] - scores[0]
+        if trend > SCORE_DELTA_THRESHOLD:
+            label = "Improving"
+            direction = "up"
+        elif trend < -SCORE_DELTA_THRESHOLD:
+            label = "Deteriorating"
+            direction = "down"
+        else:
+            label = "Stable"
+            direction = "flat"
+    else:
+        if delta > SCORE_DELTA_THRESHOLD:
+            label = "Improving"
+            direction = "up"
+        elif delta < -SCORE_DELTA_THRESHOLD:
+            label = "Deteriorating"
+            direction = "down"
+        else:
+            label = "Stable"
+            direction = "flat"
+
+    return {
+        "label": label,
+        "direction": direction,
+        "delta": round(delta, 1),
+        "prev_score": previous,
+        "curr_score": latest,
+        "run_count": len(history)
+    }
+
+
 def diff_envelopes(prev: dict, curr: dict) -> list[dict]:
-    """
-    Compare two evidence envelopes dimension by dimension.
-    Returns list of changes with delta, direction and affected dimension.
-    """
     changes = []
     prev_dims = prev.get("dimensions", {})
     curr_dims = curr.get("dimensions", {})
@@ -49,17 +91,13 @@ def diff_envelopes(prev: dict, curr: dict) -> list[dict]:
 
 
 def assess_alert(prev_result: dict, curr_result: ScoringResult) -> dict:
-    """
-    Determine whether a material change alert should fire.
-    Returns alert dict with severity, reasons and recommended action.
-    """
-    prev_score = prev_result["score"]
-    curr_score = curr_result.investment_readiness_score
+    prev_score   = prev_result["score"]
+    curr_score   = curr_result.investment_readiness_score
     prev_verdict = prev_result["verdict"]
     curr_verdict = curr_result.verdict
 
-    score_delta = curr_score - prev_score
-    verdict_changed = prev_verdict != curr_verdict
+    score_delta          = curr_score - prev_score
+    verdict_changed      = prev_verdict != curr_verdict
     material_score_change = abs(score_delta) >= SCORE_DELTA_THRESHOLD
 
     prev_vi = VERDICT_ORDER.index(prev_verdict) if prev_verdict in VERDICT_ORDER else 2
@@ -80,12 +118,12 @@ def assess_alert(prev_result: dict, curr_result: ScoringResult) -> dict:
 
     if verdict_changed and curr_vi > prev_vi:
         alert["severity"] = "HIGH"
-        alert["reasons"].append(f"Verdict deteriorated from {prev_verdict} to {curr_verdict}")
-        alert["recommended_action"] = "Review Evidence Envelope immediately. Verdict change may affect capital allocation decision."
+        alert["reasons"].append(f"Verdict deteriorated: {prev_verdict} to {curr_verdict}")
+        alert["recommended_action"] = "Review Evidence Envelope. Verdict change affects capital allocation."
     elif verdict_changed and curr_vi < prev_vi:
         alert["severity"] = "POSITIVE"
-        alert["reasons"].append(f"Verdict improved from {prev_verdict} to {curr_verdict}")
-        alert["recommended_action"] = "Asset conditions have improved. Consider refreshing your investment thesis."
+        alert["reasons"].append(f"Verdict improved: {prev_verdict} to {curr_verdict}")
+        alert["recommended_action"] = "Asset conditions improved. Refresh investment thesis."
     elif material_score_change and score_delta < 0:
         alert["severity"] = "MEDIUM"
         alert["reasons"].append(f"Score declined {abs(score_delta)} points ({prev_score} to {curr_score})")
@@ -93,42 +131,42 @@ def assess_alert(prev_result: dict, curr_result: ScoringResult) -> dict:
     elif material_score_change and score_delta > 0:
         alert["severity"] = "POSITIVE"
         alert["reasons"].append(f"Score improved {score_delta} points ({prev_score} to {curr_score})")
-        alert["recommended_action"] = "Conditions have improved. Asset may warrant re-assessment."
+        alert["recommended_action"] = "Conditions improved. Asset may warrant re-assessment."
 
     return alert
 
 
 def record_assessment(watch_list: dict, result: ScoringResult) -> dict:
-    """
-    Add or update an asset in the watch list.
-    Returns updated watch list.
-    """
     asset_id = result.asset_id
     entry = {
-        "asset_id": asset_id,
-        "asset_name": result.asset_name,
-        "score": result.investment_readiness_score,
-        "verdict": result.verdict,
-        "generated_at": result.generated_at,
+        "asset_id":            asset_id,
+        "asset_name":          result.asset_name,
+        "score":               result.investment_readiness_score,
+        "evidence_completeness": getattr(result, "evidence_completeness_score", 0),
+        "verdict":             result.verdict,
+        "generated_at":        result.generated_at,
         "envelope_fingerprint": envelope_fingerprint(result.evidence_envelope),
-        "envelope": result.evidence_envelope,
+        "envelope":            result.evidence_envelope,
     }
 
     if asset_id not in watch_list:
-        watch_list[asset_id] = {"history": [], "alert": None}
+        watch_list[asset_id] = {"history": [], "alert": None, "stability": None}
 
     watch_list[asset_id]["history"].append(entry)
     watch_list[asset_id]["latest"] = entry
 
-    # Diff if we have a previous run
     history = watch_list[asset_id]["history"]
+
+    # Decision Stability
+    watch_list[asset_id]["stability"] = decision_stability(history)
+
+    # Diff and alert
     if len(history) >= 2:
         prev = history[-2]
-        curr_entry = history[-1]
-        dim_changes = diff_envelopes(prev["envelope"], curr_entry["envelope"])
+        dim_changes = diff_envelopes(prev["envelope"], entry["envelope"])
         alert = assess_alert(prev, result)
         alert["dim_changes"] = dim_changes
-        alert["checked_at"] = datetime.now(timezone.utc).isoformat()
+        alert["checked_at"]  = datetime.now(timezone.utc).isoformat()
         watch_list[asset_id]["alert"] = alert
     else:
         watch_list[asset_id]["alert"] = None
