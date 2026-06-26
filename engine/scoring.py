@@ -181,6 +181,23 @@ def score_d1(inp, R):
         adjusted = fl["max_score_when_triggered"]
         adjs.append({"rule": f"{fl['rule']} v1.0", "adjustment": None, "reason": fl["description"]})
 
+    # Provenance for boolean D1 fields
+    ef.append(EvidenceField("regulatory_change_last_12m", inp.regulatory_change_last_12m,
+        source="Government gazette / Ministry of Mines announcements", confidence="medium",
+        verified=inp.regulatory_change_last_12m is not None, rule_code="D1-ADJ-regulatory_change_last_12m"))
+    ef.append(EvidenceField("mining_code_revision_in_progress", inp.mining_code_revision_in_progress,
+        source="Government gazette / legislative tracker", confidence="medium",
+        verified=True, rule_code="D1-ADJ-mining_code_revision_in_progress"))
+    ef.append(EvidenceField("investment_arbitration_last_5y", inp.investment_arbitration_last_5y,
+        source="ICSID / PCA arbitration register", confidence="medium",
+        verified=True, rule_code="D1-ADJ-investment_arbitration_last_5y"))
+    ef.append(EvidenceField("bilateral_investment_treaty", inp.bilateral_investment_treaty,
+        source="UNCTAD BIT database (investmentpolicy.unctad.org)", confidence="high",
+        verified=True, rule_code="D1-ADJ-bilateral_investment_treaty"))
+    ef.append(EvidenceField("eiti_compliant_country", inp.eiti_compliant_country,
+        source="EITI — eiti.org/countries", confidence="high",
+        verified=True, rule_code="D1-ADJ-eiti_compliant_country"))
+
     w = R["dimensions"]["D1"]["weight"]
     return DimensionScore("D1","Jurisdiction Stability",w,round(base,2),round(adjusted,2),round(adjusted*w,4),sub,adjs,rules,gaps,ef)
 
@@ -215,6 +232,23 @@ def score_d2(inp, R):
             adjs.append({"rule": f"D2-ADJ-{flag} v1.0", "adjustment": pts, "reason": flag.replace("_"," ").capitalize()})
 
     adjusted = min(100, max(0, base + adj_total))
+    ef.append(EvidenceField("beneficial_ownership_disclosure", inp.beneficial_ownership_disclosure,
+        source="National beneficial ownership register / EITI beneficial ownership annex",
+        confidence="high", verified=True, rule_code="D2-BO-001"))
+    if inp.eiti_payment_disclosure_quality is not None:
+        ef.append(EvidenceField("eiti_payment_disclosure_quality", inp.eiti_payment_disclosure_quality,
+            source="EITI country report — payment disclosure annex", confidence="high",
+            verified=True, rule_code="D2-PDQ-001"))
+    ef.append(EvidenceField("pep_in_ownership_chain", inp.pep_in_ownership_chain,
+        source="ICIJ Offshore Leaks / national PEP register", confidence="medium",
+        verified=True, rule_code="D2-ADJ-pep_in_ownership_chain"))
+    ef.append(EvidenceField("fatf_grey_list_jurisdiction", inp.fatf_grey_list_jurisdiction,
+        source="FATF public statement (fatf-gafi.org)", confidence="high",
+        verified=True, rule_code="D2-ADJ-fatf_grey_list_jurisdiction"))
+    ef.append(EvidenceField("payment_data_gap_over_24m", inp.payment_data_gap_over_24m,
+        source="EITI country report timeline", confidence="medium",
+        verified=True, rule_code="D2-ADJ-payment_data_gap_over_24m"))
+
     w = R["dimensions"]["D2"]["weight"]
     return DimensionScore("D2","Revenue Transparency",w,round(base,2),round(adjusted,2),round(adjusted*w,4),sub,adjs,rules,gaps,ef)
 
@@ -251,6 +285,25 @@ def score_d3(inp, R):
             adjs.append({"rule": f"D3-ADJ-{flag} v1.0", "adjustment": pts, "reason": flag.replace("_"," ").capitalize()})
 
     adjusted = min(100, max(0, base + adj_total))
+    ef.append(EvidenceField("resource_estimate_standard", inp.resource_estimate_standard,
+        source="NI 43-101 / JORC filing — exchange regulatory announcement",
+        confidence="high", verified=inp.resource_estimate_standard != "none", rule_code="D3-RES-001"))
+    ef.append(EvidenceField("reserve_classification", inp.reserve_classification,
+        source="Technical report / competent person report",
+        confidence="high", verified=inp.reserve_classification != "none", rule_code="D3-RC-001"))
+    ef.append(EvidenceField("production_data_availability", inp.production_data_availability,
+        source="Operator annual report / quarterly production release",
+        confidence="high", verified=inp.production_data_availability != "none", rule_code="D3-PD-001"))
+    ef.append(EvidenceField("exploration_stage", inp.exploration_stage,
+        source="Operator disclosure / exchange filing",
+        confidence="high", verified=True, rule_code="D3-ES-001"))
+    ef.append(EvidenceField("unresolved_resource_conflict", inp.unresolved_resource_conflict,
+        source="Court records / mining ministry gazette", confidence="medium",
+        verified=True, rule_code="D3-ADJ-unresolved_resource_conflict"))
+    ef.append(EvidenceField("no_independent_technical_report", inp.no_independent_technical_report,
+        source="Exchange filing / SEDAR / ASX announcements", confidence="high",
+        verified=True, rule_code="D3-ADJ-no_independent_technical_report"))
+
     w = R["dimensions"]["D3"]["weight"]
     return DimensionScore("D3","Asset Data Quality",w,round(base,2),round(adjusted,2),round(adjusted*w,4),sub,adjs,rules,gaps,ef)
 
@@ -292,6 +345,22 @@ def score_d4(inp, R):
                      "reason": f"Reserved services non-local — {regime['reserved_services_rule']}"})
 
     adjusted = min(100, max(0, base + adj_total))
+    ef.append(EvidenceField("licence_holder_status", inp.licence_holder_status,
+        source=f"Mining licence register — {regime['compliance_portal']}",
+        confidence="high", verified=inp.licence_holder_status != "other", rule_code="D4-LH-001"))
+    ef.append(EvidenceField("locas_filing_status", inp.locas_filing_status,
+        source=f"Local content compliance portal — {regime['compliance_portal']}",
+        confidence="high", verified=inp.locas_filing_status != "not_filed", rule_code="D4-FILING-001"))
+    ef.append(EvidenceField("local_procurement_evidence", inp.local_procurement_evidence,
+        source="Operator sustainability report / local content audit",
+        confidence="medium", verified=inp.local_procurement_evidence != "none", rule_code="D4-LP-001"))
+    ef.append(EvidenceField("supplier_development_programme", inp.supplier_development_programme,
+        source="Operator CSR report / government local content register",
+        confidence="medium", verified=inp.supplier_development_programme != "none", rule_code="D4-SDP-001"))
+    ef.append(EvidenceField("reserved_services_non_local", inp.reserved_services_non_local,
+        source=f"Reserved services gazette — {regime['reserved_services_rule']}",
+        confidence="medium", verified=True, rule_code="D4-ADJ-001"))
+
     w = R["dimensions"]["D4"]["weight"]
     return DimensionScore("D4","Local Content Compliance Posture",w,round(base,2),round(adjusted,2),round(adjusted*w,4),sub,adjs,rules,gaps,ef)
 
@@ -337,6 +406,25 @@ def score_d5(inp, R):
 
     base = pw + rd + rl + ws + ps
     adjusted = min(100, max(0, base))
+    ef.append(EvidenceField("power_supply", inp.power_supply,
+        source="Operator technical report / government energy regulator",
+        confidence="medium", verified=inp.power_supply != "none", rule_code="D5-PWR-001"))
+    ef.append(EvidenceField("road_access", inp.road_access,
+        source="Government road authority / operator site disclosure",
+        confidence="medium", verified=inp.road_access != "none", rule_code="D5-ROAD-001"))
+    ef.append(EvidenceField("rail_access", inp.rail_access,
+        source="National railway operator / Lobito Corridor project registry",
+        confidence="medium", verified=inp.rail_access != "none", rule_code="D5-RAIL-001"))
+    ef.append(EvidenceField("water_supply", inp.water_supply,
+        source="Water licence register / environmental permit",
+        confidence="medium", verified=inp.water_supply != "none", rule_code="D5-WATER-001"))
+    ef.append(EvidenceField("port_distance_km", inp.port_distance_km,
+        source="Geographic calculation — nearest deep water port",
+        confidence="high", verified=inp.port_distance_km is not None, rule_code="D5-PORT-001"))
+    ef.append(EvidenceField("lobito_corridor_eligible", inp.lobito_corridor_eligible,
+        source="Lobito Corridor project registry / US DFC infrastructure mandate",
+        confidence="high", verified=True, rule_code="D5-LOBITO-001"))
+
     w = R["dimensions"]["D5"]["weight"]
     return DimensionScore("D5","Infrastructure Readiness",w,round(base,2),round(adjusted,2),round(adjusted*w,4),sub,adjs,rules,gaps,ef)
 
@@ -364,6 +452,16 @@ def score_d6(inp, R):
 
     base = dfi + lv + cr + gw
     adjusted = min(100, max(0, base))
+    ef.append(EvidenceField("listed_vehicle", inp.listed_vehicle,
+        source="ASX / TSX / AIM / LSE exchange announcements",
+        confidence="high", verified=inp.listed_vehicle != "unlisted", rule_code="D6-LV-001"))
+    ef.append(EvidenceField("recent_capital_raise", inp.recent_capital_raise,
+        source="Exchange regulatory announcement / investor presentation",
+        confidence="high", verified=inp.recent_capital_raise != "none", rule_code="D6-CR-001"))
+    ef.append(EvidenceField("gulf_western_investor_linked", inp.gulf_western_investor_linked,
+        source="Investor register / Bloomberg / Refinitiv ownership data",
+        confidence="medium", verified=True, rule_code="D6-GW-001"))
+
     w = R["dimensions"]["D6"]["weight"]
     return DimensionScore("D6","Capital Access Signals",w,round(base,2),round(adjusted,2),round(adjusted*w,4),sub,adjs,rules,gaps,ef)
 
@@ -540,6 +638,7 @@ def score_asset(inp: AssetInput, rules_version: str = None) -> ScoringResult:
         envelope_hash=fingerprint,
         evidence_completeness_score=evidence_completeness,
     )
+
 
 
 
