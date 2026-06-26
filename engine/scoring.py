@@ -487,7 +487,7 @@ def compute_evidence_completeness(inp: AssetInput) -> int:
     return round((retrieved_weight / total_weight) * 100)
 
 
-
+def score_asset(inp: AssetInput, rules_version: str = None) -> ScoringResult:
     """Score an asset. Optional rules_version for historical reconstruction."""
     from engine.rules_loader import load_rules
     R = load_rules(rules_version or ACTIVE_VERSION)
@@ -532,4 +532,5 @@ def compute_evidence_completeness(inp: AssetInput) -> int:
         envelope_hash=fingerprint,
         evidence_completeness_score=evidence_completeness,
     )
+
 
