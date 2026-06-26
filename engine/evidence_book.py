@@ -310,7 +310,7 @@ def generate_evidence_book(
              "No probabilistic model or LLM produces scores. Identical inputs always produce identical outputs."),
             ("03", "Replayability",
              f"This evidence envelope carries hash {envelope.get('envelope_hash','')[:16]}... "
-             "Running the same evidence set against {result.rules_version} reproduces the same outcome. "
+             "Running the same evidence set against the version-locked rule set reproduces the same outcome. "
              "The replay function is built into the SEAM architecture."),
             ("04", "Transparency",
              f"All defaults, missing fields and confidence adjustments are disclosed in this Evidence Book. "
@@ -480,3 +480,4 @@ def generate_evidence_book(
     output_path = os.path.join(output_dir, f"{safe_name}_SEAM_EvidenceBook.pdf")
     HTML(string=html).write_pdf(output_path)
     return output_path
+
