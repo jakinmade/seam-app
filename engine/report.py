@@ -81,7 +81,9 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
     critical_risks = intel.get("critical_risks", [])
     drivers        = intel.get("investment_drivers", {})
     ev_summary     = intel.get("evidence_summary", "")
-    commodity_ctx  = intel.get("commodity_context", {})
+    commodity_ctx   = intel.get("commodity_context", {})
+    bc              = intel.get("bankability_constraints", {})
+    benchmarks      = intel.get("_benchmarks", {})  # injected by app.py
     intel_items    = intel.get("investor_intelligence", [])
     verdict_text   = intel.get("verdict_section", "")
 
@@ -369,6 +371,104 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
         <div style="font-size:9px;color:#aaa;margin-top:4px;font-style:italic;">Commodity context is provided for reference only. It does not affect the Investment Readiness Score or Verdict.</div>
         '''
 
+    # --- Bankability Constraints panel ---
+    def _bc_colour(val, good_vals, bad_vals):
+        if val in good_vals: return "#1A7A3A"
+        if val in bad_vals:  return "#CC0000"
+        return "#B8860B"
+
+    bc_html = ""
+    if bc and bc.get("constraint_summary") and bc.get("constraint_summary") != "Live in Streamlit":
+        dfi_col = {"Ready": "#1A7A3A", "Conditional": "#B8860B", "Not Ready": "#CC0000"}.get(bc.get("dfi_readiness",""), "#888")
+
+        def _flag(val, good, bad):
+            col = _bc_colour(val, good, bad)
+            return f'<span style="font-size:10px;font-weight:bold;color:{col};">{val}</span>'
+
+        bc_html = f"""
+        <h2>Bankability Constraints</h2>
+        <table style="width:100%;border-collapse:collapse;background:#f9f9f9;border:1px solid #e8e8e8;">
+          <tr style="background:{NAVY};">
+            <th style="padding:6px 12px;color:white;font-size:9px;text-align:left;text-transform:uppercase;letter-spacing:0.4px;">Constraint</th>
+            <th style="padding:6px 12px;color:white;font-size:9px;text-align:left;text-transform:uppercase;letter-spacing:0.4px;">Status</th>
+          </tr>
+          <tr><td style="padding:6px 12px;font-size:10px;color:#555;border-bottom:1px solid #eee;">Environmental Permit</td>
+              <td style="padding:6px 12px;border-bottom:1px solid #eee;">{_flag(bc.get("environmental_permit","Unknown"),["Permitted"],["Not Filed"])}</td></tr>
+          <tr><td style="padding:6px 12px;font-size:10px;color:#555;border-bottom:1px solid #eee;">ESIA on Record</td>
+              <td style="padding:6px 12px;border-bottom:1px solid #eee;">{_flag("Yes" if bc.get("esia_on_record") else "No",["Yes"],["No"])}</td></tr>
+          <tr><td style="padding:6px 12px;font-size:10px;color:#555;border-bottom:1px solid #eee;">Community Consultation</td>
+              <td style="padding:6px 12px;border-bottom:1px solid #eee;">{_flag(bc.get("community_consultation","None"),["Documented"],["None"])}</td></tr>
+          <tr><td style="padding:6px 12px;font-size:10px;color:#555;border-bottom:1px solid #eee;">Social Licence Disputes</td>
+              <td style="padding:6px 12px;border-bottom:1px solid #eee;">{_flag("Active" if bc.get("social_licence_disputes") else "None identified",["None identified"],["Active"])}</td></tr>
+          <tr><td style="padding:6px 12px;font-size:10px;color:#555;">Water Licence</td>
+              <td style="padding:6px 12px;">{_flag(bc.get("water_licence","Unknown"),["Permitted"],["Not Filed"])}</td></tr>
+        </table>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
+          <div style="font-size:10px;color:#444;">{bc.get("constraint_summary","")}</div>
+          <div style="font-size:10px;font-weight:bold;color:{dfi_col};">DFI Readiness: {bc.get("dfi_readiness","")}</div>
+        </div>
+        <div style="font-size:9px;color:#aaa;margin-top:3px;font-style:italic;">Bankability constraints reflect public evidence only. They do not affect the Investment Readiness Score.</div>
+        """
+
+    # --- Benchmarking panel ---
+    benchmark_html = ""
+    if benchmarks and not benchmarks.get("insufficient_data"):
+        asset_score = benchmarks.get("asset_score", result.investment_readiness_score)
+        glob  = benchmarks.get("global")
+        jur   = benchmarks.get("jurisdiction")
+        com   = benchmarks.get("commodity")
+
+        def _bench_bar(score, avg, width=200):
+            s_x = int((score/100)*width)
+            a_x = int((avg/100)*width) if avg else 0
+            return (
+                f'<div style="position:relative;background:#e8e8e8;border-radius:2px;height:8px;width:{width}px;margin-top:3px;">' +
+                f'<div style="background:{AMBER};border-radius:2px;height:8px;width:{s_x}px;"></div>' +
+                (f'<div style="position:absolute;top:-2px;left:{a_x}px;width:2px;height:12px;background:{NAVY};"></div>' if avg else "") +
+                '</div>'
+            )
+
+        rows = ""
+        if glob:
+            rows += f'''<tr>
+              <td style="padding:5px 10px;font-size:10px;color:#555;width:28%;">All assets</td>
+              <td style="padding:5px 10px;font-size:11px;font-weight:bold;color:{NAVY};width:12%;">{asset_score}</td>
+              <td style="padding:5px 10px;font-size:10px;color:#888;width:12%;">Avg: {glob["average"]}</td>
+              <td style="padding:5px 10px;font-size:10px;color:#888;width:12%;">Top Q: {glob["top_quartile"]}</td>
+              <td style="padding:5px 10px;">{_bench_bar(asset_score, glob["average"])}</td>
+            </tr>'''
+        if jur:
+            rows += f'''<tr>
+              <td style="padding:5px 10px;font-size:10px;color:#555;">{asset_input.jurisdiction}</td>
+              <td style="padding:5px 10px;font-size:11px;font-weight:bold;color:{NAVY};">{asset_score}</td>
+              <td style="padding:5px 10px;font-size:10px;color:#888;">Avg: {jur["average"]}</td>
+              <td style="padding:5px 10px;font-size:10px;color:#888;">Top Q: {jur["top_quartile"]}</td>
+              <td style="padding:5px 10px;">{_bench_bar(asset_score, jur["average"])}</td>
+            </tr>'''
+        if com:
+            rows += f'''<tr>
+              <td style="padding:5px 10px;font-size:10px;color:#555;">{asset_input.commodity}</td>
+              <td style="padding:5px 10px;font-size:11px;font-weight:bold;color:{NAVY};">{asset_score}</td>
+              <td style="padding:5px 10px;font-size:10px;color:#888;">Avg: {com["average"]}</td>
+              <td style="padding:5px 10px;font-size:10px;color:#888;">Top Q: {com["top_quartile"]}</td>
+              <td style="padding:5px 10px;">{_bench_bar(asset_score, com["average"])}</td>
+            </tr>'''
+
+        if rows:
+            benchmark_html = f"""
+        <h2>Benchmark</h2>
+        <div style="font-size:9px;color:#888;margin-bottom:6px;">Navy marker = average. Scored from {glob["count"] if glob else "?"} assessments in this session.</div>
+        <table style="width:100%;border-collapse:collapse;border:1px solid #e8e8e8;">
+          <tr style="background:{NAVY};">
+            <th style="padding:5px 10px;color:white;font-size:9px;text-align:left;">Group</th>
+            <th style="padding:5px 10px;color:white;font-size:9px;text-align:left;">This Asset</th>
+            <th style="padding:5px 10px;color:white;font-size:9px;text-align:left;">Average</th>
+            <th style="padding:5px 10px;color:white;font-size:9px;text-align:left;">Top Quartile</th>
+            <th style="padding:5px 10px;color:white;font-size:9px;text-align:left;">Position</th>
+          </tr>
+          {rows}
+        </table>"""
+
     html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -476,6 +576,10 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
 <!-- COMMODITY CONTEXT -->
 {commodity_panel}
 
+{bc_html}
+
+{benchmark_html}
+
 <!-- EVIDENCE SUMMARY -->
 <h2>Evidence Summary</h2>
 <div style="font-size:11px;color:#444;line-height:1.6;margin-bottom:12px;">{ev_summary}</div>
@@ -512,4 +616,5 @@ def generate_pdf(result: ScoringResult, intel: dict, asset_input, output_dir: st
     output_path = os.path.join(output_dir, f"{safe_name}_SEAM_Report.pdf")
     HTML(string=html).write_pdf(output_path)
     return output_path
+
 
