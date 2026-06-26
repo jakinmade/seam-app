@@ -19,6 +19,7 @@ from engine.retrieval import retrieve_asset_data
 from engine.report import generate_pdf
 from engine.watch import record_assessment, diff_envelopes, assess_alert
 from engine.asset_store import save_assessment, compute_benchmarks, get_all_assessments
+from engine.evidence_book import generate_evidence_book
 from engine.snippet import generate_snippet
 from data.phase1_assets import ALL_ASSETS
 
@@ -142,7 +143,8 @@ if "last_intel"   not in st.session_state: st.session_state.last_intel = None
 if "last_input"   not in st.session_state: st.session_state.last_input = None
 if "report_ready" not in st.session_state: st.session_state.report_ready = False
 if "pdf_path"     not in st.session_state: st.session_state.pdf_path = None
-if "snippet"      not in st.session_state: st.session_state.snippet = None
+if "snippet"           not in st.session_state: st.session_state.snippet = None
+if "evidence_book_path" not in st.session_state: st.session_state.evidence_book_path = None
 
 # ---------------------------------------------------------------------------
 # HELPERS
@@ -383,6 +385,13 @@ if page == "Assessment":
                 s.update(label="Report ready.", state="complete")
 
             # STEP 6 — Watch list
+            # Generate Evidence Book
+            try:
+                eb_path = generate_evidence_book(result, output_dir="output")
+                st.session_state.evidence_book_path = eb_path
+            except Exception as _eb_err:
+                st.session_state.evidence_book_path = None
+
             st.session_state.watch_list = record_assessment(st.session_state.watch_list, result)
             alert = st.session_state.watch_list.get(result.asset_id, {}).get("alert")
             save_assessment(st.session_state, result, asset_input)
@@ -546,7 +555,26 @@ if page == "Assessment":
                 st.caption(f"Benchmarks available after 2+ assets scored. Currently {bm.get('count',0)} in store.")
 
         st.markdown("")
-        dl_button(pdf_path, result.asset_id)
+        col_dl1, col_dl2 = st.columns([1, 1])
+        with col_dl1:
+            dl_button(pdf_path, result.asset_id)
+        with col_dl2:
+            eb_path = st.session_state.get("evidence_book_path")
+            if eb_path:
+                try:
+                    with open(eb_path, "rb") as f:
+                        eb64 = base64.b64encode(f.read()).decode()
+                    eb_fname = f"SEAM_{result.asset_id}_EvidenceBook.pdf"
+                    st.markdown(
+                        f'<a href="data:application/pdf;base64,{eb64}" download="{eb_fname}" '
+                        f'style="background:{NAVY};color:white;padding:11px 28px;border-radius:4px;'
+                        f'text-decoration:none;font-weight:600;font-size:14px;display:inline-block;">'
+                        f'Download Evidence Book (PDF)</a>',
+                        unsafe_allow_html=True
+                    )
+                    st.caption("Complete provenance register. Every finding traceable to a named public source.")
+                except Exception:
+                    pass
 
         with st.expander("Evidence Envelope (JSON)"):
             st.json(result.evidence_envelope)
@@ -583,7 +611,25 @@ if page == "Assessment":
         snippet = st.session_state.snippet
         if st.session_state.pdf_path:
             render_banner(result.investment_readiness_score, result.verdict, getattr(result, "evidence_completeness_score", None))
-            dl_button(st.session_state.pdf_path, result.asset_id)
+            col_dl1b, col_dl2b = st.columns([1, 1])
+            with col_dl1b:
+                dl_button(st.session_state.pdf_path, result.asset_id)
+            with col_dl2b:
+                eb_path2 = st.session_state.get("evidence_book_path")
+                if eb_path2:
+                    try:
+                        with open(eb_path2, "rb") as f:
+                            eb64b = base64.b64encode(f.read()).decode()
+                        eb_fname2 = f"SEAM_{result.asset_id}_EvidenceBook.pdf"
+                        st.markdown(
+                            f'<a href="data:application/pdf;base64,{eb64b}" download="{eb_fname2}" '
+                            f'style="background:{NAVY};color:white;padding:11px 28px;border-radius:4px;'
+                            f'text-decoration:none;font-weight:600;font-size:14px;display:inline-block;">'
+                            f'Download Evidence Book (PDF)</a>',
+                            unsafe_allow_html=True
+                        )
+                    except Exception:
+                        pass
 
     else:
         # Landing state
@@ -701,6 +747,7 @@ They do not constitute due diligence and are not a substitute for independent te
 Every investor must conduct their own assessment appropriate to their mandate, jurisdiction and risk appetite.
 Methodology SEAM-M-v1.0 | Rules SEAM-R-v1.0 | akinmade.co.uk | CONFIDENTIAL
 </div>""", unsafe_allow_html=True)
+
 
 
 
