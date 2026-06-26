@@ -18,6 +18,7 @@ from engine.intelligence import generate_intelligence
 from engine.retrieval import retrieve_asset_data
 from engine.report import generate_pdf
 from engine.watch import record_assessment, diff_envelopes, assess_alert
+from engine.asset_store import save_assessment, compute_benchmarks, get_all_assessments
 from engine.snippet import generate_snippet
 from data.phase1_assets import ALL_ASSETS
 
@@ -135,6 +136,7 @@ div[data-testid="stButton"] > button:hover {{ background:#b07d24; color:white; }
 # ---------------------------------------------------------------------------
 
 if "watch_list"   not in st.session_state: st.session_state.watch_list = {}
+if "asset_store"  not in st.session_state: st.session_state.asset_store = {}
 if "last_result"  not in st.session_state: st.session_state.last_result = None
 if "last_intel"   not in st.session_state: st.session_state.last_intel = None
 if "last_input"   not in st.session_state: st.session_state.last_input = None
@@ -383,6 +385,10 @@ if page == "Assessment":
             # STEP 6 — Watch list
             st.session_state.watch_list = record_assessment(st.session_state.watch_list, result)
             alert = st.session_state.watch_list.get(result.asset_id, {}).get("alert")
+            save_assessment(st.session_state, result, asset_input)
+            benchmarks = compute_benchmarks(st.session_state, result, asset_input)
+            # Inject benchmarks into intel for report generation
+            intel["_benchmarks"] = benchmarks
 
             st.session_state.last_result = result
             st.session_state.last_intel  = intel
@@ -418,9 +424,10 @@ if page == "Assessment":
         # ── FULL REPORT ───────────────────────────────────────────────
         render_banner(result.investment_readiness_score, result.verdict, getattr(result, "evidence_completeness_score", None))
 
-        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
             "Investment Decision", "Dimension Detail",
-            "Material Unknowns", "Verdict & Next Action", "Commodity Context"
+            "Material Unknowns", "Verdict & Next Action",
+            "Commodity Context", "Bankability"
         ])
 
         with tab1:
@@ -502,6 +509,42 @@ if page == "Assessment":
             else:
                 st.info("Commodity not identified during retrieval. Run assessment with additional context to populate this panel.")
 
+        with tab6:
+            bc = intel.get("bankability_constraints", {})
+            if bc and bc.get("constraint_summary") and bc.get("constraint_summary") != "Live in Streamlit":
+                dfi_col = {"Ready":"#1A7A3A","Conditional":"#B8860B","Not Ready":"#CC0000"}.get(bc.get("dfi_readiness",""),"#888")
+                st.markdown(f'**DFI Readiness:** <span style="color:{dfi_col};font-weight:bold;">{bc.get("dfi_readiness","")}</span>', unsafe_allow_html=True)
+                st.markdown(bc.get("constraint_summary",""))
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown(f"**Environmental Permit:** {bc.get('environmental_permit','Unknown')}")
+                    st.markdown(f"**ESIA on Record:** {'Yes' if bc.get('esia_on_record') else 'No'}")
+                    st.markdown(f"**Water Licence:** {bc.get('water_licence','Unknown')}")
+                with col2:
+                    st.markdown(f"**Community Consultation:** {bc.get('community_consultation','None')}")
+                    st.markdown(f"**Social Licence Disputes:** {'Active' if bc.get('social_licence_disputes') else 'None identified'}")
+                st.caption("Bankability constraints reflect public evidence only. They do not affect the Investment Readiness Score.")
+            else:
+                st.info("Bankability constraints will populate with live retrieval data.")
+
+            # Benchmarks
+            bm = intel.get("_benchmarks", {})
+            if bm and not bm.get("insufficient_data"):
+                st.markdown("---")
+                st.markdown("**Benchmark**")
+                glob = bm.get("global")
+                jur  = bm.get("jurisdiction")
+                com  = bm.get("commodity")
+                this = bm.get("asset_score", result.investment_readiness_score)
+                rows_data = []
+                if glob: rows_data.append(("All assets", this, glob["average"], glob["top_quartile"], glob["count"]))
+                if jur:  rows_data.append((asset_input.jurisdiction, this, jur["average"], jur["top_quartile"], jur["count"]))
+                if com:  rows_data.append((asset_input.commodity, this, com["average"], com["top_quartile"], com["count"]))
+                for label, score, avg, tq, n in rows_data:
+                    st.markdown(f"**{label}** (n={n}): This asset **{score}** | Average {avg} | Top quartile {tq}")
+            elif bm and bm.get("insufficient_data"):
+                st.caption(f"Benchmarks available after 2+ assets scored. Currently {bm.get('count',0)} in store.")
+
         st.markdown("")
         dl_button(pdf_path, result.asset_id)
 
@@ -567,6 +610,19 @@ elif page == "SEAM Watch":
     st.caption("Run any asset multiple times to track changes. Decision Stability shows direction of travel.")
 
     watch = st.session_state.watch_list
+    all_assessed = get_all_assessments(st.session_state)
+    if all_assessed and len(all_assessed) > 1:
+        with st.expander(f"Benchmark table ({len(all_assessed)} assets scored this session)"):
+            for rec in all_assessed:
+                vc_col = {"PROCEED":"#1A7A3A","PROCEED WITH CONDITIONS":"#B8860B",
+                          "MONITOR":"#1A5FA8","CAUTION":"#C65C00","AVOID":"#CC0000"}.get(rec["verdict"],"#888")
+                st.markdown(
+                    f'`{rec["asset_name"]}` &nbsp; **{rec["score"]}/100** &nbsp; '
+                    f'<span style="color:{vc_col};">{rec["verdict"]}</span> &nbsp; '
+                    f'EC: {rec["evidence_completeness"]}/100 &nbsp; {rec["jurisdiction"]}',
+                    unsafe_allow_html=True
+                )
+
     if not watch:
         st.info("No assets on watch yet. Run an assessment to add an asset to the watch list.")
     else:
@@ -645,6 +701,7 @@ They do not constitute due diligence and are not a substitute for independent te
 Every investor must conduct their own assessment appropriate to their mandate, jurisdiction and risk appetite.
 Methodology SEAM-M-v1.0 | Rules SEAM-R-v1.0 | akinmade.co.uk | CONFIDENTIAL
 </div>""", unsafe_allow_html=True)
+
 
 
 
