@@ -217,16 +217,22 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
 <!-- SCORE + VERDICT BAND -->
 <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
   <tr>
-    <td style="background:{NAVY};padding:14px 18px;width:48%;vertical-align:middle;">
-      <div class="label" style="color:#888;">Investment Readiness Score</div>
+    <td style="background:{NAVY};padding:14px 18px;width:32%;vertical-align:middle;">
+      <div class="label" style="color:#888;">Investment Readiness</div>
       <div style="font-size:44px;font-weight:bold;color:{AMBER};line-height:1;">{result.investment_readiness_score}</div>
-      <div style="color:#888;font-size:11px;">out of 100</div>
-      <div style="margin-top:6px;">{score_bar(result.investment_readiness_score, 180)}</div>
+      <div style="color:#888;font-size:10px;">out of 100</div>
+      <div style="margin-top:6px;">{score_bar(result.investment_readiness_score, 130)}</div>
     </td>
-    <td style="background:{verdict_color};padding:14px 18px;width:52%;vertical-align:middle;">
+    <td style="background:#1e2e40;padding:14px 18px;width:32%;vertical-align:middle;border-left:1px solid #2a3f55;">
+      <div class="label" style="color:#888;">Evidence Completeness</div>
+      <div style="font-size:44px;font-weight:bold;color:#7eb8d4;line-height:1;">{result.evidence_completeness_score}</div>
+      <div style="color:#888;font-size:10px;">out of 100</div>
+      <div style="margin-top:6px;">{score_bar(result.evidence_completeness_score, 130)}</div>
+    </td>
+    <td style="background:{verdict_color};padding:14px 18px;width:36%;vertical-align:middle;">
       <div class="label" style="color:rgba(255,255,255,0.6);">Verdict</div>
-      <div style="font-size:26px;font-weight:bold;color:white;line-height:1.1;margin-top:4px;">{result.verdict}</div>
-      <div style="font-size:10px;color:rgba(255,255,255,0.75);margin-top:8px;">{result.next_action[:90]}{'...' if len(result.next_action) > 90 else ''}</div>
+      <div style="font-size:24px;font-weight:bold;color:white;line-height:1.1;margin-top:4px;">{result.verdict}</div>
+      <div style="font-size:10px;color:rgba(255,255,255,0.75);margin-top:8px;">{result.next_action[:80]}{'...' if len(result.next_action) > 80 else ''}</div>
     </td>
   </tr>
 </table>
@@ -277,6 +283,7 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
   <tr><td style="padding:3px 0;"><strong>Generated</strong></td><td>{generated}</td></tr>
   <tr><td style="padding:3px 0;"><strong>Asset ID</strong></td><td>{result.asset_id}</td></tr>
   <tr><td style="padding:3px 0;"><strong>Scoring Engine</strong></td><td>Deterministic rules engine. No language model in scoring path. Identical inputs always produce identical scores, verdicts and floor rule outcomes.</td></tr>
+  <tr><td style="padding:3px 0;"><strong>Evidence Completeness</strong></td><td>Computed from retrieved vs defaulted fields at time of assessment. Reflects evidence coverage, not asset quality.</td></tr>
   <tr><td style="padding:3px 0;"><strong>Intelligence Engine</strong></td><td>SEAM Intelligence Engine — constrained to the evidence envelope. Cannot alter scores, verdicts or floor rules. Output prose may vary between runs; all scored outputs are deterministic.</td></tr>
   <tr><td style="padding:3px 0;"><strong>Data Sources</strong></td><td>EITI, Fraser Institute, World Bank WGI, USGS, ASX/TSX/AIM filings, Ministry of Mines publications, cadastre portals</td></tr>
 </table>
@@ -298,4 +305,5 @@ def generate_pdf(result: ScoringResult, intel: dict, asset_input, output_dir: st
     output_path = os.path.join(output_dir, f"{result.asset_id}_SEAM_Report.pdf")
     HTML(string=html).write_pdf(output_path)
     return output_path
+
 
