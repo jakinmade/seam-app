@@ -1,14 +1,14 @@
 """
 SEAM Intelligence Layer
-Sprint 2 — Claude as constrained technical editor, not prose writer.
+Sprint 2 — Constrained technical editor. Institutional documentation register.
 
-Claude's role:
+Role:
 1. Surface what the investor does not know — grounded in the evidence envelope
 2. Produce institutional documentation, not intelligent prose
 
-Claude never scores. The engine scores.
-Claude never softens a verdict. The engine sets the verdict.
-Claude produces technical documentation.
+The intelligence engine never scores. The rules engine scores.
+The intelligence engine never softens a verdict. The rules engine sets the verdict.
+The intelligence engine produces technical documentation.
 """
 
 import urllib.request
@@ -282,7 +282,7 @@ def _extract_json(text: str) -> str:
     return text
 
 
-def call_claude(prompt: str) -> dict:
+def call_intelligence_engine(prompt: str) -> dict:
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
 
     if not api_key:
@@ -291,6 +291,7 @@ def call_claude(prompt: str) -> dict:
     payload = json.dumps({
         "model": "claude-sonnet-4-6",
         "max_tokens": 4000,
+        "temperature": 0,
         "system": SEAM_SYSTEM_PROMPT,
         "messages": [{"role": "user", "content": prompt}]
     }).encode("utf-8")
@@ -359,4 +360,5 @@ def _mock_intelligence(prompt: str) -> dict:
 
 def generate_intelligence(result: ScoringResult, inp: AssetInput) -> dict:
     prompt = build_prompt(result, inp)
-    return call_claude(prompt)
+    return call_intelligence_engine(prompt)
+
