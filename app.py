@@ -1,17 +1,15 @@
 """
 SEAM — Structured Evidence for African Mining
-Streamlit Front Door  |  Sprint 3
+Streamlit App  |  Sprints 4-5-6
 
-User enters an asset name and jurisdiction.
-SEAM retrieves public data, scores the asset, generates the report.
+Sprint 4: Polish + Stripe payment gate + PDF download
+Sprint 5: SEAM Watch — diff evidence envelopes, flag material changes
+Sprint 6: Free snippet — D1/D2/D3 + cited sources, full report gated
 """
 
 import streamlit as st
-import json
-import os
-import sys
-import base64
-from datetime import datetime
+import json, os, sys, base64, uuid, hashlib
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -19,10 +17,12 @@ from engine.scoring import score_asset
 from engine.intelligence import generate_intelligence
 from engine.retrieval import retrieve_asset_data
 from engine.report import generate_pdf
+from engine.watch import record_assessment, diff_envelopes, assess_alert
+from engine.snippet import generate_snippet
 from data.phase1_assets import ALL_ASSETS
 
 # ---------------------------------------------------------------------------
-# PAGE CONFIG
+# CONFIG
 # ---------------------------------------------------------------------------
 
 st.set_page_config(
@@ -32,23 +32,28 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-AMBER = "#C8962E"
-NAVY = "#0B1929"
+AMBER  = "#C8962E"
+NAVY   = "#0B1929"
+REPORT_PRICE_GBP = 750
 
-VERDICT_COLOURS = {
-    "PROCEED": "#1A7A3A",
-    "PROCEED WITH CONDITIONS": "#B8860B",
-    "MONITOR": "#1A5FA8",
-    "CAUTION": "#C65C00",
-    "AVOID": "#CC0000",
+VERDICT_COLOUR = {
+    "PROCEED":                  "#1A7A3A",
+    "PROCEED WITH CONDITIONS":  "#B8860B",
+    "MONITOR":                  "#1A5FA8",
+    "CAUTION":                  "#C65C00",
+    "AVOID":                    "#CC0000",
 }
 
-VERDICT_BG = {
-    "PROCEED": "#e8f5e9",
-    "PROCEED WITH CONDITIONS": "#fffde7",
-    "MONITOR": "#e3f2fd",
-    "CAUTION": "#fff3e0",
-    "AVOID": "#ffebee",
+JURISDICTIONS = [
+    "Zambia","Democratic Republic of Congo","Botswana","Ghana",
+    "Tanzania","Namibia","Guinea","Zimbabwe","Mozambique"
+]
+
+PRELOADED = {
+    "-- Select a pre-loaded asset --": None,
+    "Konkola Copper Mines (KCM / CopperTech) — Zambia": "ZMB-001",
+    "Mingomba Copper Project (KoBold Metals) — Zambia":  "ZMB-002",
+    "Lumwana Copper Mine (Barrick Gold) — Zambia":       "ZMB-003",
 }
 
 # ---------------------------------------------------------------------------
@@ -57,165 +62,257 @@ VERDICT_BG = {
 
 st.markdown(f"""
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+html, body, [class*="css"] {{ font-family: Arial, sans-serif; }}
 
-  html, body, [class*="css"] {{
-    font-family: 'Inter', Arial, sans-serif;
-  }}
+.seam-header {{
+  background:{NAVY}; padding:22px 32px; margin:-1rem -1rem 1.8rem -1rem;
+  display:flex; align-items:center; justify-content:space-between;
+}}
+.seam-logo  {{ font-size:30px; font-weight:700; color:{AMBER}; letter-spacing:2px; }}
+.seam-sub   {{ font-size:11px; color:#aaa; letter-spacing:1px; margin-top:2px; }}
+.seam-ver   {{ font-size:11px; color:#666; text-align:right; line-height:1.7; }}
 
-  .seam-header {{
-    background: {NAVY};
-    padding: 24px 32px;
-    margin: -1rem -1rem 2rem -1rem;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }}
-  .seam-logo {{
-    font-size: 32px;
-    font-weight: 700;
-    color: {AMBER};
-    letter-spacing: 2px;
-  }}
-  .seam-tagline {{
-    font-size: 12px;
-    color: #aaa;
-    letter-spacing: 1px;
-    margin-top: 2px;
-  }}
-  .seam-version {{
-    font-size: 11px;
-    color: #666;
-    text-align: right;
-  }}
+.banner {{ display:flex; margin-bottom:18px; border-radius:4px; overflow:hidden; }}
+.ban-l  {{ background:{NAVY}; padding:18px 24px; flex:1; }}
+.ban-r  {{ padding:18px 24px; flex:1; display:flex; flex-direction:column; justify-content:center; }}
+.ban-score {{ font-size:52px; font-weight:700; color:{AMBER}; line-height:1; }}
+.ban-denom {{ font-size:16px; color:#888; }}
+.ban-lbl   {{ font-size:11px; color:#aaa; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px; }}
+.ban-verdict {{ font-size:24px; font-weight:700; color:white; }}
 
-  .score-banner {{
-    display: flex;
-    margin-bottom: 20px;
-    border-radius: 4px;
-    overflow: hidden;
-  }}
-  .score-left {{
-    background: {NAVY};
-    padding: 20px 28px;
-    flex: 1;
-  }}
-  .score-number {{
-    font-size: 56px;
-    font-weight: 700;
-    color: {AMBER};
-    line-height: 1;
-  }}
-  .score-label {{
-    font-size: 11px;
-    color: #aaa;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-bottom: 4px;
-  }}
-  .score-denom {{
-    font-size: 18px;
-    color: #888;
-  }}
+.dim-row {{ display:flex; align-items:flex-start; padding:10px 0;
+            border-bottom:1px solid #f0f0f0; gap:10px; }}
+.dim-code {{ font-weight:700; color:{NAVY}; width:34px; font-size:13px; flex-shrink:0; padding-top:2px; }}
+.dim-body {{ flex:1; }}
+.dim-name {{ font-size:13px; font-weight:600; color:#222; }}
+.dim-wt   {{ font-size:11px; color:#aaa; }}
+.dim-adj  {{ font-size:11px; margin-top:2px; }}
+.dim-gap  {{ font-size:11px; color:#C65C00; margin-top:2px; }}
+.dim-text {{ font-size:12px; color:#444; line-height:1.55; margin-top:5px; }}
+.dim-right {{ text-align:right; flex-shrink:0; }}
+.dim-num  {{ font-size:18px; font-weight:700; color:{NAVY}; }}
+.dim-bar-bg   {{ width:90px; height:7px; background:#e8e8e8; border-radius:3px; margin-top:5px; display:inline-block; }}
+.dim-bar-fill {{ height:7px; background:{AMBER}; border-radius:3px; }}
 
-  .dim-row {{
-    display: flex;
-    align-items: center;
-    padding: 10px 0;
-    border-bottom: 1px solid #f0f0f0;
-    gap: 12px;
-  }}
-  .dim-code {{
-    font-weight: 700;
-    color: {NAVY};
-    width: 36px;
-    font-size: 13px;
-    flex-shrink: 0;
-  }}
-  .dim-name {{
-    flex: 1;
-    font-size: 13px;
-    color: #333;
-  }}
-  .dim-score {{
-    font-weight: 700;
-    color: {NAVY};
-    font-size: 16px;
-    width: 48px;
-    text-align: right;
-    flex-shrink: 0;
-  }}
-  .dim-bar-bg {{
-    width: 100px;
-    height: 8px;
-    background: #e8e8e8;
-    border-radius: 4px;
-    flex-shrink: 0;
-  }}
-  .dim-bar-fill {{
-    height: 8px;
-    background: {AMBER};
-    border-radius: 4px;
-  }}
+.intel-item {{ display:flex; align-items:flex-start; margin-bottom:14px; gap:10px; }}
+.intel-num  {{ min-width:26px; height:26px; background:{AMBER}; border-radius:50%;
+               display:flex; align-items:center; justify-content:center;
+               font-weight:700; color:white; font-size:12px; flex-shrink:0; }}
+.intel-text {{ font-size:13px; color:#333; line-height:1.6; padding-top:2px; }}
 
-  .intel-item {{
-    display: flex;
-    align-items: flex-start;
-    margin-bottom: 16px;
-    gap: 12px;
-  }}
-  .intel-num {{
-    min-width: 28px;
-    height: 28px;
-    background: {AMBER};
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    color: white;
-    font-size: 13px;
-    flex-shrink: 0;
-  }}
-  .intel-text {{
-    font-size: 13px;
-    color: #333;
-    line-height: 1.6;
-    padding-top: 3px;
-  }}
+.snip-dim {{ background:#f8f8f8; border-radius:4px; padding:14px 16px; margin-bottom:10px;
+             border-left:4px solid {AMBER}; }}
+.snip-score {{ font-size:28px; font-weight:700; color:{NAVY}; }}
+.snip-src   {{ font-size:11px; color:#888; margin-top:6px; }}
 
-  .source-row {{
-    font-size: 11px;
-    color: #666;
-    padding: 4px 0;
-    border-bottom: 1px solid #f5f5f5;
-  }}
+.cert-block {{ background:{NAVY}; color:white; padding:16px 20px; border-radius:4px;
+               margin-top:16px; font-size:12px; line-height:1.8; }}
+.cert-title {{ font-size:13px; font-weight:700; color:{AMBER}; margin-bottom:8px; letter-spacing:1px; }}
 
-  .disclaimer {{
-    font-size: 11px;
-    color: #aaa;
-    margin-top: 32px;
-    padding-top: 16px;
-    border-top: 1px solid #eee;
-    line-height: 1.6;
-  }}
+.watch-alert-high {{ background:#fff0f0; border-left:4px solid #CC0000;
+                     padding:12px 16px; border-radius:0 4px 4px 0; margin-bottom:12px; }}
+.watch-alert-pos  {{ background:#f0fff4; border-left:4px solid #1A7A3A;
+                     padding:12px 16px; border-radius:0 4px 4px 0; margin-bottom:12px; }}
+.watch-alert-med  {{ background:#fff8e1; border-left:4px solid #B8860B;
+                     padding:12px 16px; border-radius:0 4px 4px 0; margin-bottom:12px; }}
 
-  div[data-testid="stButton"] button {{
-    background: {AMBER};
-    color: white;
-    border: none;
-    font-weight: 600;
-    padding: 10px 28px;
-    border-radius: 4px;
-    font-size: 14px;
-    letter-spacing: 0.3px;
-  }}
-  div[data-testid="stButton"] button:hover {{
-    background: #b07d24;
-    color: white;
-  }}
+.next-action {{ background:#f8f8f8; border-left:4px solid {AMBER};
+                padding:14px 16px; border-radius:0 4px 4px 0; margin-top:14px; }}
+.na-lbl {{ font-size:11px; color:#888; text-transform:uppercase; letter-spacing:1px; margin-bottom:5px; }}
+.na-txt {{ font-size:13px; font-weight:600; color:#222; }}
+
+.disclaimer {{ font-size:10px; color:#bbb; margin-top:28px; padding-top:14px;
+               border-top:1px solid #eee; line-height:1.7; }}
+
+div[data-testid="stButton"] > button {{
+  background:{AMBER}; color:white; border:none; font-weight:600;
+  padding:10px 28px; border-radius:4px; font-size:14px;
+}}
+div[data-testid="stButton"] > button:hover {{ background:#b07d24; color:white; }}
 </style>
 """, unsafe_allow_html=True)
+
+# ---------------------------------------------------------------------------
+# SESSION STATE
+# ---------------------------------------------------------------------------
+
+if "watch_list"   not in st.session_state: st.session_state.watch_list = {}
+if "last_result"  not in st.session_state: st.session_state.last_result = None
+if "last_intel"   not in st.session_state: st.session_state.last_intel = None
+if "last_input"   not in st.session_state: st.session_state.last_input = None
+if "paid"         not in st.session_state: st.session_state.paid = False
+if "report_ready" not in st.session_state: st.session_state.report_ready = False
+if "pdf_path"     not in st.session_state: st.session_state.pdf_path = None
+if "snippet"      not in st.session_state: st.session_state.snippet = None
+
+# ---------------------------------------------------------------------------
+# HELPERS
+# ---------------------------------------------------------------------------
+
+def vc(verdict): return VERDICT_COLOUR.get(verdict, "#333")
+
+def render_banner(score, verdict):
+    st.markdown(f"""
+    <div class="banner">
+      <div class="ban-l">
+        <div class="ban-lbl">Investment Readiness Score</div>
+        <div><span class="ban-score">{score}</span><span class="ban-denom"> / 100</span></div>
+      </div>
+      <div class="ban-r" style="background:{vc(verdict)};">
+        <div class="ban-lbl" style="color:rgba(255,255,255,0.7);">Verdict</div>
+        <div class="ban-verdict">{verdict}</div>
+      </div>
+    </div>""", unsafe_allow_html=True)
+
+def render_dims(dimensions, findings):
+    for d in dimensions:
+        bar = int(d.adjusted_score)
+        finding = findings.get(d.code, "")
+        adjs = "".join(
+            f'<div class="dim-adj" style="color:{"#1A7A3A" if (a.get("adjustment") or 0)>0 else "#CC0000"};">'
+            f'{"+" if (a.get("adjustment") or 0)>0 else ""}{a.get("adjustment")}pts: {a["reason"]}</div>'
+            for a in d.adjustments if a.get("adjustment") is not None
+        )
+        gaps = "".join(f'<div class="dim-gap">&#9888; {g}</div>' for g in d.data_gaps)
+        st.markdown(f"""
+        <div class="dim-row">
+          <div class="dim-code">{d.code}</div>
+          <div class="dim-body">
+            <span class="dim-name">{d.name}</span>
+            <span class="dim-wt"> &nbsp;{int(d.weight*100)}%</span>
+            {adjs}{gaps}
+            {f'<div class="dim-text">{finding}</div>' if finding else ''}
+          </div>
+          <div class="dim-right">
+            <div class="dim-num">{d.adjusted_score:.1f}</div>
+            <div class="dim-bar-bg"><div class="dim-bar-fill" style="width:{bar}%;"></div></div>
+          </div>
+        </div>""", unsafe_allow_html=True)
+
+def render_intel(items):
+    for i, f in enumerate(items, 1):
+        st.markdown(f"""
+        <div class="intel-item">
+          <div class="intel-num">{i}</div>
+          <div class="intel-text">{f}</div>
+        </div>""", unsafe_allow_html=True)
+
+def cert_block(result):
+    report_id = hashlib.sha256(f"{result.asset_id}{result.generated_at}".encode()).hexdigest()[:16].upper()
+    ts = datetime.fromisoformat(result.generated_at).strftime("%d %B %Y %H:%M UTC")
+    st.markdown(f"""
+    <div class="cert-block">
+      <div class="cert-title">SEAM CERTIFICATION</div>
+      Asset: {result.asset_name}<br>
+      Asset ID: {result.asset_id}<br>
+      Score: {result.investment_readiness_score} / 100<br>
+      Verdict: {result.verdict}<br>
+      Methodology: {result.methodology_version} | Rules: {result.rules_version}<br>
+      Generated: {ts}<br>
+      Report ID: SEAM-{report_id}
+    </div>""", unsafe_allow_html=True)
+
+def dl_button(pdf_path, asset_id):
+    with open(pdf_path, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode()
+    fname = f"SEAM_{asset_id}_Report.pdf"
+    st.markdown(
+        f'<a href="data:application/pdf;base64,{b64}" download="{fname}" '
+        f'style="background:{AMBER};color:white;padding:11px 28px;border-radius:4px;'
+        f'text-decoration:none;font-weight:600;font-size:14px;display:inline-block;">'
+        f'Download Full Report (PDF)</a>',
+        unsafe_allow_html=True
+    )
+
+def render_snippet(snippet):
+    st.markdown(f"### Free Snippet — {snippet['asset_name']}")
+    st.caption("Three public scores. Every source cited. Verify before you spend a penny.")
+    for dim in snippet["snippet_dimensions"]:
+        gaps = "".join(f'<div style="color:#C65C00;font-size:11px;">&#9888; {g}</div>' for g in dim.get("data_gaps",[]))
+        src = dim.get("source", {})
+        st.markdown(f"""
+        <div class="snip-dim">
+          <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;">{dim['code']} — {dim['name']}</div>
+          <div class="snip-score">{dim['score']:.1f} <span style="font-size:16px;color:#aaa;">/ 100</span></div>
+          {gaps}
+          <div class="snip-src">
+            Source: <strong>{src.get('name','')}</strong> — {src.get('what','')}<br>
+            <a href="{src.get('url','#')}" target="_blank" style="color:{AMBER};">{src.get('url','')}</a>
+          </div>
+        </div>""", unsafe_allow_html=True)
+    st.info(f"**Full Report includes:** D4 Local Content, D5 Infrastructure Readiness, D6 Capital Access Signals, aggregate score, verdict, next action and full Evidence Envelope.")
+
+def render_watch_alert(alert, asset_name):
+    if not alert or not alert.get("fires"):
+        return
+    sev = alert.get("severity","")
+    cls = {"HIGH":"watch-alert-high","MEDIUM":"watch-alert-med","POSITIVE":"watch-alert-pos"}.get(sev,"watch-alert-med")
+    icon = {"HIGH":"🔴","MEDIUM":"🟠","POSITIVE":"🟢"}.get(sev,"🔵")
+    reasons = " ".join(f"<div>{r}</div>" for r in alert.get("reasons",[]))
+    changes = ""
+    for c in alert.get("dim_changes",[]):
+        arrow = "▲" if c["direction"]=="up" else "▼"
+        col = "#1A7A3A" if c["direction"]=="up" else "#CC0000"
+        changes += f'<div style="font-size:12px;color:{col};">{arrow} {c["dimension"]} {c["dimension_name"]}: {c["prev_score"]} → {c["curr_score"]} ({c["delta"]:+.1f})</div>'
+    st.markdown(f"""
+    <div class="{cls}">
+      <div style="font-weight:700;margin-bottom:6px;">{icon} SEAM Watch Alert — {asset_name}</div>
+      {reasons}
+      <div style="margin-top:8px;">{changes}</div>
+      <div style="margin-top:8px;font-size:12px;font-weight:600;">{alert.get('recommended_action','')}</div>
+    </div>""", unsafe_allow_html=True)
+
+# ---------------------------------------------------------------------------
+# STRIPE
+# ---------------------------------------------------------------------------
+
+def stripe_checkout(result, inp) -> bool:
+    """
+    Create Stripe checkout session and return pay button.
+    Returns True if payment already confirmed in session state.
+    """
+    if st.session_state.paid:
+        return True
+
+    stripe_key = st.secrets.get("STRIPE_SECRET_KEY","")
+    price_id   = st.secrets.get("STRIPE_PRICE_ID","")
+
+    if not stripe_key or not price_id:
+        # Dev mode — bypass payment
+        st.info("Payment gateway not configured. In production, Stripe checkout appears here.")
+        if st.button("Simulate payment (dev mode)"):
+            st.session_state.paid = True
+            st.rerun()
+        return False
+
+    import stripe as stripe_lib
+    stripe_lib.api_key = stripe_key
+
+    try:
+        session = stripe_lib.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[{"price": price_id, "quantity": 1}],
+            mode="payment",
+            success_url=st.secrets.get("APP_URL","http://localhost:8501") + "?paid=true&asset=" + result.asset_id,
+            cancel_url=st.secrets.get("APP_URL","http://localhost:8501"),
+            metadata={"asset_id": result.asset_id, "asset_name": result.asset_name}
+        )
+        st.markdown(
+            f'<a href="{session.url}" target="_blank" '
+            f'style="background:{AMBER};color:white;padding:11px 28px;border-radius:4px;'
+            f'text-decoration:none;font-weight:600;font-size:14px;display:inline-block;">'
+            f'Purchase Full Report — £{REPORT_PRICE_GBP}</a>',
+            unsafe_allow_html=True
+        )
+    except Exception as e:
+        st.error(f"Stripe error: {e}")
+
+    return False
+
+# Check URL params for post-payment redirect
+qp = st.query_params
+if qp.get("paid") == "true":
+    st.session_state.paid = True
 
 # ---------------------------------------------------------------------------
 # HEADER
@@ -225,325 +322,267 @@ st.markdown(f"""
 <div class="seam-header">
   <div>
     <div class="seam-logo">SEAM</div>
-    <div class="seam-tagline">STRUCTURED EVIDENCE FOR AFRICAN MINING</div>
+    <div class="seam-sub">STRUCTURED EVIDENCE FOR AFRICAN MINING</div>
   </div>
-  <div class="seam-version">
-    Methodology SEAM-M-v1.0<br>
-    Rules SEAM-R-v1.0<br>
-    akinmade.co.uk
+  <div class="seam-ver">
+    Methodology SEAM-M-v1.0 &nbsp;|&nbsp; Rules SEAM-R-v1.0<br>
+    9 jurisdictions &nbsp;|&nbsp; akinmade.co.uk
   </div>
-</div>
-""", unsafe_allow_html=True)
+</div>""", unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
-# INTRO
+# NAV
 # ---------------------------------------------------------------------------
 
-st.markdown("""
-**Before committing capital to African mining due diligence, know what the data actually says.**
-
-Enter an asset name below. SEAM retrieves public data from EITI, Fraser Institute, World Bank,
-exchange filings and cadastre portals. The rules engine scores six dimensions deterministically.
-Claude writes the analysis. Every number traces to a named public source.
-""")
-
+page = st.radio("", ["Assessment", "SEAM Watch", "Free Snippet"], horizontal=True, label_visibility="collapsed")
 st.markdown("---")
 
-# ---------------------------------------------------------------------------
-# INPUT
-# ---------------------------------------------------------------------------
+# ===========================================================================
+# PAGE: ASSESSMENT
+# ===========================================================================
 
-JURISDICTIONS = [
-    "Zambia", "Democratic Republic of Congo", "Botswana", "Ghana",
-    "Tanzania", "Namibia", "Guinea", "Zimbabwe", "Mozambique"
-]
+if page == "Assessment":
 
-PRELOADED = {
-    "-- Select a pre-loaded asset --": None,
-    "Konkola Copper Mines (KCM / CopperTech) — Zambia": "ZMB-001",
-    "Mingomba Copper Project (KoBold Metals) — Zambia": "ZMB-002",
-    "Lumwana Copper Mine (Barrick Gold) — Zambia": "ZMB-003",
-}
+    st.markdown("**Before committing capital to African mining due diligence, know what the data actually says.**")
+    st.caption("Enter an asset below. SEAM retrieves public data, scores six dimensions deterministically, and surfaces what you don't know.")
+    st.markdown("")
 
-col1, col2 = st.columns([2, 1])
+    mode = st.radio("Mode", ["Live retrieval", "Pre-loaded asset"], horizontal=True)
 
-with col1:
-    mode = st.radio(
-        "Assessment mode",
-        ["Live retrieval — enter any asset name", "Pre-loaded — use a Phase 1 asset"],
-        horizontal=True
-    )
+    if mode == "Live retrieval":
+        c1, c2 = st.columns([2,1])
+        with c1: asset_name_input = st.text_input("Asset name", placeholder="e.g. Kansanshi Mine, Obuasi Gold Mine, Kamoa-Kakula...")
+        with c2: jurisdiction_input = st.selectbox("Jurisdiction", JURISDICTIONS)
+        context_input = st.text_input("Additional context (optional)", placeholder="Operator, ASX ticker, known recent developments...")
+        use_preloaded = False
+    else:
+        choice = st.selectbox("Select asset", list(PRELOADED.keys()))
+        use_preloaded = PRELOADED.get(choice)
+        asset_name_input = jurisdiction_input = context_input = ""
 
-if mode == "Live retrieval — enter any asset name":
-    col_a, col_b = st.columns([2, 1])
-    with col_a:
-        asset_name_input = st.text_input(
-            "Asset name",
-            placeholder="e.g. Chibuluma Copper Mine, Kansanshi Mine, Obuasi Gold Mine..."
-        )
-    with col_b:
-        jurisdiction_input = st.selectbox("Jurisdiction", JURISDICTIONS)
-    context_input = st.text_input(
-        "Additional context (optional)",
-        placeholder="e.g. operator name, ASX ticker, known recent developments..."
-    )
-    use_preloaded = False
+    st.markdown("")
+    run = st.button("Run SEAM Assessment")
 
-else:
-    preloaded_choice = st.selectbox("Select asset", list(PRELOADED.keys()))
-    use_preloaded = PRELOADED.get(preloaded_choice)
-    asset_name_input = ""
-    jurisdiction_input = ""
-    context_input = ""
+    if run:
+        if not use_preloaded and not asset_name_input.strip():
+            st.error("Enter an asset name.")
+            st.stop()
 
-st.markdown("")
-run_btn = st.button("Run SEAM Assessment")
+        # Reset paid state for new run
+        st.session_state.paid = False
+        st.session_state.report_ready = False
+        st.session_state.pdf_path = None
 
-# ---------------------------------------------------------------------------
-# HELPERS
-# ---------------------------------------------------------------------------
+        with st.spinner("Running SEAM assessment..."):
 
-def render_score_banner(score, verdict):
-    vc = VERDICT_COLOURS.get(verdict, "#333")
-    st.markdown(f"""
-    <div class="score-banner">
-      <div class="score-left">
-        <div class="score-label">Investment Readiness Score</div>
-        <div>
-          <span class="score-number">{score}</span>
-          <span class="score-denom"> / 100</span>
-        </div>
-      </div>
-      <div style="background:{vc};padding:20px 28px;flex:1;display:flex;flex-direction:column;justify-content:center;">
-        <div style="font-size:11px;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Verdict</div>
-        <div style="font-size:26px;font-weight:700;color:white;">{verdict}</div>
-      </div>
-    </div>
-    """, unsafe_allow_html=True)
+            # STEP 1 — Data
+            sources_meta = {}
+            if use_preloaded:
+                asset_input = ALL_ASSETS[use_preloaded]
+            else:
+                with st.status("Retrieving public data...", expanded=True) as s:
+                    st.write(f"Searching: {asset_name_input}, {jurisdiction_input}")
+                    st.write("EITI, Fraser Institute, World Bank WGI, exchange filings, cadastre...")
+                    asset_input, sources_meta = retrieve_asset_data(asset_name_input, jurisdiction_input, context_input)
+                    if sources_meta.get("mock"):
+                        st.write("Live retrieval active in deployed app with ANTHROPIC_API_KEY.")
+                    s.update(label="Data retrieved.", state="complete")
 
+            # STEP 2 — Score
+            with st.status("Scoring engine...", expanded=False) as s:
+                result = score_asset(asset_input)
+                s.update(label=f"Score: {result.investment_readiness_score}/100 — {result.verdict}", state="complete")
 
-def render_dimensions(dimensions, dim_findings):
-    for d in dimensions:
-        bar_width = int(d.adjusted_score)
-        finding = dim_findings.get(d.code, "")
-        gaps_html = ""
-        if d.data_gaps:
-            gaps_html = "".join(
-                f'<div style="color:#C65C00;font-size:11px;margin-top:3px;">⚠ {g}</div>'
-                for g in d.data_gaps
-            )
-        adj_html = ""
-        if d.adjustments:
-            for a in d.adjustments:
-                if a.get("adjustment") is not None:
-                    sign = "+" if a["adjustment"] > 0 else ""
-                    color = "#1A7A3A" if a["adjustment"] > 0 else "#CC0000"
-                    adj_html += f'<div style="font-size:11px;color:{color};margin-top:2px;">{sign}{a["adjustment"]}pts: {a["reason"]}</div>'
+            # STEP 3 — Snippet (always free)
+            snippet = generate_snippet(result)
+            st.session_state.snippet = snippet
 
-        st.markdown(f"""
-        <div class="dim-row">
-          <div class="dim-code">{d.code}</div>
-          <div class="dim-name">
-            <div><strong>{d.name}</strong> <span style="color:#aaa;font-size:11px;">({int(d.weight*100)}%)</span></div>
-            {adj_html}{gaps_html}
-            {f'<div style="font-size:12px;color:#555;margin-top:5px;line-height:1.5;">{finding}</div>' if finding else ''}
-          </div>
-          <div class="dim-score">{d.adjusted_score:.1f}</div>
-          <div class="dim-bar-bg">
-            <div class="dim-bar-fill" style="width:{bar_width}%;"></div>
-          </div>
-        </div>
-        """, unsafe_allow_html=True)
+            # STEP 4 — Intelligence
+            with st.status("Intelligence analysis (Claude)...", expanded=False) as s:
+                intel = generate_intelligence(result, asset_input)
+                s.update(label="Analysis complete.", state="complete")
 
+            # STEP 5 — PDF (generated, not yet shown)
+            with st.status("Preparing report...", expanded=False) as s:
+                os.makedirs("/tmp/seam", exist_ok=True)
+                pdf_path = generate_pdf(result, intel, asset_input, "/tmp/seam")
+                s.update(label="Report ready.", state="complete")
 
-def render_intelligence(items):
-    for i, finding in enumerate(items, 1):
-        st.markdown(f"""
-        <div class="intel-item">
-          <div class="intel-num">{i}</div>
-          <div class="intel-text">{finding}</div>
-        </div>
-        """, unsafe_allow_html=True)
+            # STEP 6 — Watch list
+            st.session_state.watch_list = record_assessment(st.session_state.watch_list, result)
+            alert = st.session_state.watch_list.get(result.asset_id, {}).get("alert")
 
+            st.session_state.last_result = result
+            st.session_state.last_intel  = intel
+            st.session_state.last_input  = asset_input
+            st.session_state.pdf_path    = pdf_path
+            st.session_state.report_ready = True
 
-def pdf_download_button(pdf_path, asset_id):
-    with open(pdf_path, "rb") as f:
-        b64 = base64.b64encode(f.read()).decode()
-    filename = f"SEAM_{asset_id}_Report.pdf"
-    href = f'<a href="data:application/pdf;base64,{b64}" download="{filename}" style="background:{AMBER};color:white;padding:10px 24px;border-radius:4px;text-decoration:none;font-weight:600;font-size:14px;">Download PDF Report</a>'
-    st.markdown(href, unsafe_allow_html=True)
+        # Watch alert
+        if alert:
+            render_watch_alert(alert, result.asset_name)
 
-
-# ---------------------------------------------------------------------------
-# RUN ASSESSMENT
-# ---------------------------------------------------------------------------
-
-if run_btn:
-
-    # Validate input
-    if not use_preloaded and not asset_name_input.strip():
-        st.error("Enter an asset name to run a live assessment.")
-        st.stop()
-
-    with st.spinner("Running SEAM assessment..."):
-
-        # STEP 1 — Get asset input
-        sources_meta = {}
-        if use_preloaded:
-            asset_input = ALL_ASSETS[use_preloaded]
-            st.success(f"Pre-loaded asset: {asset_input.asset_name}")
-        else:
-            with st.status("Retrieving public data...", expanded=True) as status:
-                st.write(f"Searching for: {asset_name_input}, {jurisdiction_input}")
-                st.write("Checking EITI, Fraser Institute, World Bank WGI, exchange filings...")
-                asset_input, sources_meta = retrieve_asset_data(
-                    asset_name_input, jurisdiction_input, context_input
-                )
-                if sources_meta.get("mock"):
-                    st.write("Live retrieval requires ANTHROPIC_API_KEY — using conservative defaults.")
-                else:
-                    st.write(f"Retrieved {len(sources_meta.get('sources_consulted', []))} data points.")
-                status.update(label="Data retrieved.", state="complete")
-
-        # STEP 2 — Score
-        with st.status("Running rules engine...", expanded=False) as status:
-            result = score_asset(asset_input)
-            status.update(label=f"Score: {result.investment_readiness_score}/100 — {result.verdict}", state="complete")
-
-        # STEP 3 — Intelligence layer
-        with st.status("Generating intelligence analysis (Claude)...", expanded=False) as status:
-            intel = generate_intelligence(result, asset_input)
-            status.update(label="Analysis complete.", state="complete")
-
-        # STEP 4 — PDF
-        with st.status("Generating PDF report...", expanded=False) as status:
-            pdf_path = generate_pdf(result, intel, asset_input, output_dir="/tmp/seam_reports")
-            status.update(label="PDF ready.", state="complete")
-
-    # ---------------------------------------------------------------------------
-    # RESULTS
-    # ---------------------------------------------------------------------------
-
-    st.markdown("---")
-
-    # Asset identity
-    st.markdown(f"### {result.asset_name}")
-    st.caption(f"{asset_input.jurisdiction}  ·  {asset_input.province}  ·  {asset_input.commodity}  ·  {result.asset_id}  ·  {result.generated_at[:10]}")
-
-    # Score banner
-    render_score_banner(result.investment_readiness_score, result.verdict)
-
-    # Floor rules
-    if result.floor_rules_triggered:
+        # Floor rules
         for rule in result.floor_rules_triggered:
             st.warning(f"**Floor Rule {rule['code']}** — {rule['description']}")
 
-    # Tabs
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "Executive Summary",
-        "Dimension Findings",
-        "What the Investor Does Not Know",
-        "Verdict & Next Action"
-    ])
+        # Asset header
+        st.markdown(f"### {result.asset_name}")
+        st.caption(f"{asset_input.jurisdiction} · {asset_input.province} · {asset_input.commodity} · {result.asset_id} · {result.generated_at[:10]}")
 
-    with tab1:
-        st.markdown(intel.get("executive_summary", ""))
+        # ── FREE SNIPPET ─────────────────────────────────────────────────────
+        st.markdown("#### Free Scores")
+        for dim in snippet["snippet_dimensions"]:
+            src = dim.get("source", {})
+            c1, c2, c3 = st.columns([1, 2, 2])
+            with c1:
+                st.markdown(f"**{dim['code']}** {dim['name']}")
+            with c2:
+                st.markdown(f"**{dim['score']:.1f} / 100**")
+            with c3:
+                st.markdown(f"[{src.get('name','')}]({src.get('url','#')})")
 
-    with tab2:
-        render_dimensions(result.dimensions, intel.get("dimension_findings", {}))
+        st.markdown("---")
 
-    with tab3:
-        st.markdown(f"""
-        <div style="font-size:12px;color:#888;margin-bottom:16px;font-style:italic;">
-        Signals, dependencies and anomalies not visible from a surface read of public data.
-        Every finding is grounded in the evidence envelope.
-        </div>
-        """, unsafe_allow_html=True)
-        render_intelligence(intel.get("investor_intelligence", []))
+        # ── PAYMENT GATE ─────────────────────────────────────────────────────
+        st.markdown("#### Full Investment Readiness Report")
+        st.caption("Aggregate score, verdict, all six dimensions, investor intelligence and Evidence Envelope.")
 
-    with tab4:
-        vc = VERDICT_COLOURS.get(result.verdict, "#333")
-        st.markdown(f"""
-        <div style="background:{vc};color:white;padding:16px 20px;border-radius:4px;margin-bottom:16px;">
-          <div style="font-size:11px;opacity:0.7;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Verdict — {result.methodology_version}</div>
-          <div style="font-size:22px;font-weight:700;">{result.verdict}</div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.markdown(intel.get("verdict_section", ""))
-        st.markdown(f"""
-        <div style="background:#f8f8f8;border-left:4px solid {AMBER};padding:14px 16px;margin-top:16px;border-radius:0 4px 4px 0;">
-          <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Next Action</div>
-          <div style="font-size:13px;font-weight:600;color:#222;">{result.next_action}</div>
-        </div>
-        """, unsafe_allow_html=True)
+        paid = stripe_checkout(result, asset_input)
 
-    # Sources retrieved
-    if sources_meta.get("sources_consulted"):
-        with st.expander("Sources consulted during retrieval"):
-            for s in sources_meta["sources_consulted"]:
+        if paid:
+            # ── FULL REPORT ───────────────────────────────────────────────
+            render_banner(result.investment_readiness_score, result.verdict)
+
+            tab1, tab2, tab3, tab4 = st.tabs([
+                "Executive Summary", "Dimension Findings",
+                "What the Investor Does Not Know", "Verdict & Next Action"
+            ])
+
+            with tab1:
+                st.markdown(intel.get("executive_summary",""))
+                cert_block(result)
+
+            with tab2:
+                render_dims(result.dimensions, intel.get("dimension_findings", {}))
+
+            with tab3:
+                st.markdown('<div style="font-size:12px;color:#888;margin-bottom:14px;font-style:italic;">Signals, dependencies and anomalies not visible from a surface read of public data. Every finding grounded in the evidence envelope.</div>', unsafe_allow_html=True)
+                render_intel(intel.get("investor_intelligence", []))
+
+            with tab4:
+                vcolor = vc(result.verdict)
                 st.markdown(f"""
-                <div class="source-row">
-                  <strong>{s.get('field','')}</strong> — {s.get('source','')}
-                  {f" | <a href='{s['url']}' target='_blank'>{s['url'][:60]}...</a>" if s.get('url') else ''}
-                  {f" | Found: {s.get('value_found','')}" if s.get('value_found') else ''}
-                </div>
-                """, unsafe_allow_html=True)
+                <div style="background:{vcolor};color:white;padding:14px 20px;border-radius:4px;margin-bottom:14px;">
+                  <div style="font-size:11px;opacity:0.7;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Verdict — {result.methodology_version}</div>
+                  <div style="font-size:22px;font-weight:700;">{result.verdict}</div>
+                </div>""", unsafe_allow_html=True)
+                st.markdown(intel.get("verdict_section",""))
+                st.markdown(f'<div class="next-action"><div class="na-lbl">Next Action</div><div class="na-txt">{result.next_action}</div></div>', unsafe_allow_html=True)
 
-    if sources_meta.get("data_gaps"):
-        with st.expander(f"Data gaps ({len(sources_meta['data_gaps'])} fields not found in public sources)"):
-            for gap in sources_meta["data_gaps"]:
-                st.markdown(f"⚠ {gap}")
+            st.markdown("")
+            dl_button(pdf_path, result.asset_id)
 
-    # PDF download
-    st.markdown("")
-    st.markdown("**Download the full report:**")
-    pdf_download_button(pdf_path, result.asset_id)
+            with st.expander("Evidence Envelope (JSON)"):
+                st.json(result.evidence_envelope)
 
-    # Evidence envelope
-    with st.expander("Evidence envelope (JSON)"):
-        st.json(result.evidence_envelope)
+            if sources_meta.get("sources_consulted"):
+                with st.expander(f"Sources consulted ({len(sources_meta['sources_consulted'])})"):
+                    for s in sources_meta["sources_consulted"]:
+                        st.markdown(f"**{s.get('field','')}** — {s.get('source','')} | Found: {s.get('value_found','')}")
 
-    st.markdown(f"""
-    <div class="disclaimer">
-    SEAM Investment Readiness Reports are produced for informational purposes only. They do not constitute investment advice, legal advice or financial advice.
-    They do not constitute due diligence and are not a substitute for independent technical, legal or financial assessment.
-    Methodology {result.methodology_version} | Rules {result.rules_version} | akinmade.co.uk | CONFIDENTIAL
-    </div>
-    """, unsafe_allow_html=True)
+    elif st.session_state.report_ready and st.session_state.last_result:
+        # Restore previous result on rerun
+        result  = st.session_state.last_result
+        intel   = st.session_state.last_intel
+        snippet = st.session_state.snippet
+        paid    = st.session_state.paid
+        if paid and st.session_state.pdf_path:
+            render_banner(result.investment_readiness_score, result.verdict)
+            dl_button(st.session_state.pdf_path, result.asset_id)
+
+    else:
+        # Landing state
+        c1, c2, c3 = st.columns(3)
+        props = [
+            ("Deterministic Engine", f"Six dimensions. Fixed weightings. Published rules. Same inputs always produce the same outputs."),
+            ("Full Evidence Envelope", f"Every number traces to a named public source. EITI, Fraser, World Bank WGI, exchange filings, cadastre."),
+            ("What You Don't Know", f"Signals and anomalies buried in the evidence that the score alone does not communicate."),
+        ]
+        for col, (title, text) in zip([c1,c2,c3], props):
+            with col:
+                st.markdown(f"""
+                <div style="padding:18px;background:#f8f9fa;border-radius:4px;border-left:4px solid {AMBER};height:100%;">
+                  <div style="font-weight:700;color:{NAVY};margin-bottom:8px;">{title}</div>
+                  <div style="font-size:13px;color:#555;">{text}</div>
+                </div>""", unsafe_allow_html=True)
+
+# ===========================================================================
+# PAGE: SEAM WATCH
+# ===========================================================================
+
+elif page == "SEAM Watch":
+    st.markdown("### SEAM Watch")
+    st.caption("Assets scored in this session. Run the same asset again to detect changes.")
+
+    watch = st.session_state.watch_list
+    if not watch:
+        st.info("No assets on watch yet. Run an assessment to add an asset to the watch list.")
+    else:
+        for asset_id, entry in watch.items():
+            latest = entry.get("latest", {})
+            alert  = entry.get("alert")
+            history = entry.get("history", [])
+
+            with st.expander(f"{latest.get('asset_name',asset_id)}  —  {latest.get('score','?')}/100  —  {latest.get('verdict','?')}", expanded=True):
+                if alert and alert.get("fires"):
+                    render_watch_alert(alert, latest.get("asset_name", asset_id))
+                else:
+                    st.success("No material change detected since last assessment.")
+
+                if len(history) >= 2:
+                    st.markdown("**Score history**")
+                    for h in history:
+                        ts = h["generated_at"][:16].replace("T"," ")
+                        vcolor = vc(h["verdict"])
+                        st.markdown(f'`{ts}` &nbsp; **{h["score"]}/100** &nbsp; <span style="color:{vcolor};font-weight:600;">{h["verdict"]}</span>', unsafe_allow_html=True)
+
+                if alert and alert.get("dim_changes"):
+                    st.markdown("**Dimension changes**")
+                    for c in alert["dim_changes"]:
+                        arrow = "▲" if c["direction"]=="up" else "▼"
+                        color = "#1A7A3A" if c["direction"]=="up" else "#CC0000"
+                        st.markdown(f'<span style="color:{color};">{arrow} {c["dimension"]} {c["dimension_name"]}: {c["prev_score"]} → {c["curr_score"]} ({c["delta"]:+.1f}pts)</span>', unsafe_allow_html=True)
+
+# ===========================================================================
+# PAGE: FREE SNIPPET
+# ===========================================================================
+
+elif page == "Free Snippet":
+    st.markdown("### Free Snippet")
+    st.caption("Three public scores on any asset scored in this session. No registration. Verify every source before spending a penny.")
+
+    watch = st.session_state.watch_list
+    if not watch:
+        st.info("Run an assessment first. The free snippet appears here for every scored asset.")
+    else:
+        for asset_id, entry in watch.items():
+            latest = entry.get("latest", {})
+            st.markdown(f"**{latest.get('asset_name', asset_id)}**")
+            result = st.session_state.last_result
+            if result and result.asset_id == asset_id:
+                snippet = generate_snippet(result)
+                render_snippet(snippet)
+            st.markdown("---")
 
 # ---------------------------------------------------------------------------
-# FOOTER (when no run yet)
+# FOOTER
 # ---------------------------------------------------------------------------
 
-else:
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown(f"""
-        <div style="padding:20px;background:#f8f9fa;border-radius:4px;border-left:4px solid {AMBER};">
-          <div style="font-weight:700;color:{NAVY};margin-bottom:8px;">Deterministic Engine</div>
-          <div style="font-size:13px;color:#555;">Six dimensions. Fixed weightings. Published rules.
-          Same inputs always produce the same outputs. No discretionary judgement in the scoring path.</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col2:
-        st.markdown(f"""
-        <div style="padding:20px;background:#f8f9fa;border-radius:4px;border-left:4px solid {AMBER};">
-          <div style="font-weight:700;color:{NAVY};margin-bottom:8px;">Full Evidence Envelope</div>
-          <div style="font-size:13px;color:#555;">Every number traces to a named public source.
-          EITI, Fraser Institute, World Bank WGI, exchange filings, cadastre data.</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col3:
-        st.markdown(f"""
-        <div style="padding:20px;background:#f8f9fa;border-radius:4px;border-left:4px solid {AMBER};">
-          <div style="font-weight:700;color:{NAVY};margin-bottom:8px;">What You Don't Know</div>
-          <div style="font-size:13px;color:#555;">Signals, anomalies and dependencies buried in
-          the evidence that the score alone does not communicate. That is the intelligence.</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown(f"""
-    <div style="margin-top:40px;font-size:11px;color:#aaa;text-align:center;">
-    Methodology SEAM-M-v1.0 | Rules SEAM-R-v1.0 | Jurisdictions: Zambia, DRC, Botswana, Ghana, Tanzania, Namibia, Guinea, Zimbabwe, Mozambique | akinmade.co.uk
-    </div>
-    """, unsafe_allow_html=True)
+st.markdown(f"""
+<div class="disclaimer">
+SEAM Investment Readiness Reports are produced for informational purposes only. They do not constitute investment advice, legal advice or financial advice.
+They do not constitute due diligence and are not a substitute for independent technical, legal or financial assessment.
+Every investor must conduct their own assessment appropriate to their mandate, jurisdiction and risk appetite.
+Methodology SEAM-M-v1.0 | Rules SEAM-R-v1.0 | akinmade.co.uk | CONFIDENTIAL
+</div>""", unsafe_allow_html=True)
