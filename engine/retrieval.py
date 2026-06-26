@@ -12,7 +12,7 @@ import os
 import urllib.request
 import urllib.error
 from engine.scoring import AssetInput
-from engine.known_assets import get_known_asset_seed, get_known_jurisdiction_seed
+from engine.known_assets import apply_seeds
 
 
 # ---------------------------------------------------------------------------
@@ -394,20 +394,16 @@ def retrieve_asset_data(asset_name: str, jurisdiction: str,
             "zambia": "ZMB", "ghana": "GHA", "tanzania": "TZA",
             "botswana": "BWA", "namibia": "NAM", "drc": "COD",
             "guinea": "GIN", "zimbabwe": "ZWE", "mozambique": "MOZ",
+            "cote d'ivoire": "CIV", "ivory coast": "CIV",
         }
         jcode = jur_map.get(jurisdiction.lower(), "")
-        asset_seed     = get_known_asset_seed(asset_name)
-        jur_seed       = get_known_jurisdiction_seed(jcode)
 
         op        = _identify_operator(api_key, asset_name, jurisdiction, context)
         retrieved = _retrieve_fields(api_key, asset_name, jurisdiction, context, op)
 
-        # Apply both seeds as verified public facts — they always win over defaults
-        # Jurisdiction seeds: e.g. Zambia EITI compliant since 2012
-        # Asset seeds: e.g. KCM commodity = Copper, stage = producing
-        # Live retrieval data has already been applied above — seeds fill any remaining gaps
-        for field, value in {**asset_seed, **jur_seed}.items():
-            retrieved[field] = value
+        # Apply seed layer — jurisdiction facts always apply, asset seed fills gaps
+        # Web-retrieved quantitative values (Fraser, WB) are kept if found
+        retrieved = apply_seeds(retrieved, asset_name, jcode)
     except RuntimeError as e:
         return _mock_retrieval(asset_name, jurisdiction), {
             "mock": True, "api_error": str(e)
@@ -521,5 +517,6 @@ def _mock_retrieval(asset_name: str, jurisdiction: str) -> AssetInput:
         wb_rule_of_law_percentile=None,
         wb_regulatory_quality_percentile=None,
     )
+
 
 
