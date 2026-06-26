@@ -211,6 +211,7 @@ def cert_block(result):
       Asset: {result.asset_name}<br>
       Asset ID: {result.asset_id}<br>
       Score: {result.investment_readiness_score} / 100<br>
+      Evidence Completeness: {result.evidence_completeness_score} / 100<br>
       Verdict: {result.verdict}<br>
       Methodology: {result.methodology_version} | Rules: {result.rules_version}<br>
       Generated: {ts}<br>
@@ -296,8 +297,8 @@ st.markdown("---")
 
 if page == "Assessment":
 
-    st.markdown("**Before committing capital to African mining due diligence, know what the data actually says.**")
-    st.caption("Enter an asset below. SEAM locates public evidence, scores six dimensions against a fixed methodology, and surfaces what the score alone does not show.")
+    st.markdown("**Know what the public record says before you commit.**")
+    st.caption("Enter a mining asset. SEAM searches public sources, scores six investment dimensions, and produces a structured decision report.")
     st.markdown("")
 
     mode = st.radio("Mode", ["Live retrieval", "Pre-loaded asset"], horizontal=True)
@@ -306,7 +307,24 @@ if page == "Assessment":
         c1, c2 = st.columns([2,1])
         with c1: asset_name_input = st.text_input("Asset name", placeholder="e.g. Kansanshi Mine, Obuasi Gold Mine, Kamoa-Kakula...")
         with c2: jurisdiction_input = st.selectbox("Jurisdiction", JURISDICTIONS)
-        context_input = st.text_input("Additional context (optional)", placeholder="Operator, ASX ticker, known recent developments...")
+        context_input = st.text_area(
+            "Supporting information (optional)",
+            placeholder="Paste operator details, ASX/TSX ticker, recent news, technical report extracts, or any other relevant information. The more context you provide, the richer the evidence envelope.",
+            height=80
+        )
+        uploaded_file = st.file_uploader("Attach a document (optional — PDF, TXT)", type=["pdf", "txt"])
+        if uploaded_file is not None:
+            try:
+                import io
+                if uploaded_file.type == "application/pdf":
+                    st.caption("PDF attached. Text will be extracted and used as supporting context.")
+                    file_text = uploaded_file.read().decode("utf-8", errors="ignore")
+                else:
+                    file_text = uploaded_file.read().decode("utf-8", errors="ignore")
+                context_input = (context_input + "\n\nATTACHED DOCUMENT:\n" + file_text[:3000]).strip()
+                st.caption(f"Document loaded: {len(file_text)} characters. First 3,000 characters will be used.")
+            except Exception as e:
+                st.warning(f"Could not read file: {e}")
         use_preloaded = False
     else:
         choice = st.selectbox("Select asset", list(PRELOADED.keys()))
@@ -564,6 +582,7 @@ They do not constitute due diligence and are not a substitute for independent te
 Every investor must conduct their own assessment appropriate to their mandate, jurisdiction and risk appetite.
 Methodology SEAM-M-v1.0 | Rules SEAM-R-v1.0 | akinmade.co.uk | CONFIDENTIAL
 </div>""", unsafe_allow_html=True)
+
 
 
 
