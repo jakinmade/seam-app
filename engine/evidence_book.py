@@ -406,7 +406,7 @@ def generate_evidence_book(
         )}
         <div style="margin-top:10px;padding-top:8px;border-top:1px solid #2a3f55;">
           <span style="font-size:9px;color:#888;">Decision: </span>
-          <span style="font-size:12px;font-weight:bold;color:white;background:{vc_colour};padding:2px 10px;border-radius:2px;">{result.verdict}</span>
+          <span style="font-size:12px;font-weight:bold;color:white;background:{vc};padding:2px 10px;border-radius:2px;">{result.verdict}</span>
         </div>
       </div>
     </td>
