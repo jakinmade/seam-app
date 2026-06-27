@@ -284,7 +284,7 @@ st.markdown(f"""
   </div>
   <div class="seam-ver">
     Methodology SEAM-M-v1.0 &nbsp;|&nbsp; Rules SEAM-R-v1.0<br>
-    Bankability Intelligence &nbsp;|&nbsp; 9 jurisdictions &nbsp;|&nbsp; akinmade.co.uk
+    Deterministic. Evidence-verifiable. Auditable. &nbsp;|&nbsp; 9 jurisdictions &nbsp;|&nbsp; akinmade.co.uk
   </div>
 </div>""", unsafe_allow_html=True)
 
@@ -301,8 +301,8 @@ st.markdown("---")
 
 if page == "Assessment":
 
-    st.markdown("**Bankability Intelligence for African Mining Assets.**")
-    st.caption("SEAM retrieves public evidence, applies a deterministic methodology, and produces a traceable investment readiness decision. Every conclusion is auditable. No analyst opinion in the scoring path.")
+    st.markdown("**The first deterministic, evidence-verifiable bankability assessment platform for African mining assets.**")
+    st.caption("Every conclusion is traceable to a named public source. Every score is produced by deterministic rules. No analyst opinion in the scoring path.")
     st.markdown("")
 
     mode = st.radio("Mode", ["Live retrieval", "Pre-loaded asset"], horizontal=True)
@@ -747,6 +747,7 @@ They do not constitute due diligence and are not a substitute for independent te
 Every investor must conduct their own assessment appropriate to their mandate, jurisdiction and risk appetite.
 Methodology SEAM-M-v1.0 | Rules SEAM-R-v1.0 | akinmade.co.uk | CONFIDENTIAL
 </div>""", unsafe_allow_html=True)
+
 
 
 
