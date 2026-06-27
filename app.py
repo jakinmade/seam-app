@@ -8,6 +8,7 @@ Sprint 6: Free snippet — D1/D2/D3 + cited sources, full report gated
 """
 
 import streamlit as st
+from seam_test_page import render_test_page
 import json, os, sys, base64, uuid, hashlib
 from datetime import datetime, timezone
 
@@ -26,6 +27,12 @@ from data.phase1_assets import ALL_ASSETS
 # ---------------------------------------------------------------------------
 # CONFIG
 # ---------------------------------------------------------------------------
+
+# Hidden test page — ?page=test
+_qp = st.query_params.get("page", "")
+if _qp == "test":
+    render_test_page()
+    st.stop()
 
 st.set_page_config(
     page_title="SEAM — Structured Evidence for African Mining",
@@ -749,6 +756,7 @@ They do not constitute due diligence and are not a substitute for independent te
 Every investor must conduct their own assessment appropriate to their mandate, jurisdiction and risk appetite.
 Methodology SEAM-M-v1.0 | Rules SEAM-R-v1.0 | akinmade.co.uk | CONFIDENTIAL
 </div>""", unsafe_allow_html=True)
+
 
 
 
