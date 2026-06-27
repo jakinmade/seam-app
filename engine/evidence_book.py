@@ -78,6 +78,37 @@ def _count_sources(envelope: dict) -> int:
     return len(sources)
 
 
+# Source categories for Issue 3
+SOURCE_CATEGORIES = {
+    "Government": ["Government gazette", "Ministry of Mines", "ICSID", "PCA arbitration",
+                   "Mining licence register", "Local content compliance portal", "Reserved services gazette",
+                   "Government road authority", "Water licence register", "Court records",
+                   "Mining ministry gazette", "Operator disclosure / exchange filing"],
+    "International": ["World Bank WGI", "EITI", "FATF", "UNCTAD BIT database",
+                      "IFC/AfDB/BII", "World Bank Projects", "African Development Bank",
+                      "ICIJ Offshore Leaks", "Geographic calculation"],
+    "Exchange": ["ASX", "TSX", "AIM", "LSE", "SEDAR", "exchange regulatory announcement",
+                 "Exchange filing", "NI 43-101", "JORC", "SAMREC", "Technical report",
+                 "competent person report", "Operator annual report", "quarterly production"],
+    "Registry": ["National beneficial ownership register", "Lobito Corridor project registry",
+                 "cadastre", "Mining commission", "Companies House"],
+    "Commercial": ["S&P Capital IQ", "Refinitiv", "Bloomberg", "Investor register",
+                   "Operator sustainability report", "Operator CSR report",
+                   "Operator technical report"],
+    "Index/Research": ["Fraser Institute", "USGS", "National railway operator",
+                       "government energy regulator"],
+}
+
+def _categorise_source(source: str) -> str:
+    if not source:
+        return "Other"
+    source_lower = source.lower()
+    for cat, keywords in SOURCE_CATEGORIES.items():
+        if any(kw.lower() in source_lower for kw in keywords):
+            return cat
+    return "Other"
+
+
 def generate_evidence_book(
     result: ScoringResult,
     output_dir: str = "output"
@@ -117,6 +148,46 @@ def generate_evidence_book(
             rule_code  = ef.get("rule_code") or ""
             notes      = ef.get("notes") or ""
 
+            # Score Effect — look up the sub-score contribution for this field
+            sub_scores  = dim_data.get("sub_scores", {})
+            # Map field names to sub-score keys
+            _field_to_sub = {
+                "fraser_investment_attractiveness": "fraser_institute_score",
+                "wb_rule_of_law_percentile": "wb_rule_of_law",
+                "wb_regulatory_quality_percentile": "wb_regulatory_quality",
+                "eiti_implementation_status": "eiti_implementation_status",
+                "beneficial_ownership_disclosure": "beneficial_ownership_disclosure",
+                "eiti_payment_disclosure_quality": "eiti_payment_disclosure_quality",
+                "resource_estimate_standard": "resource_estimate_standard",
+                "reserve_classification": "reserve_classification",
+                "production_data_availability": "production_data_availability",
+                "exploration_stage": "exploration_stage",
+                "licence_holder_status": "licence_holder_status",
+                "locas_filing_status": "compliance_filing_status",
+                "local_procurement_evidence": "local_procurement_evidence",
+                "supplier_development_programme": "supplier_development_programme",
+                "power_supply": "power_supply",
+                "road_access": "road_access",
+                "rail_access": "rail_access",
+                "water_supply": "water_supply",
+                "port_distance_km": "port_distance",
+                "active_dfi_engagement": "active_dfi_engagement",
+                "listed_vehicle": "listed_vehicle",
+                "recent_capital_raise": "recent_capital_raise",
+                "gulf_western_investor_linked": "gulf_western_investor",
+            }
+            sub_key = _field_to_sub.get(field_name)
+            sub_data = sub_scores.get(sub_key, {}) if sub_key else {}
+            if sub_data and sub_data.get("score") is not None:
+                sub_score = sub_data.get("score", 0)
+                sub_weight = sub_data.get("weight", 0)
+                contribution = round(sub_score * sub_weight, 1)
+                score_effect_html = f'<span style="font-size:9px;color:#555;">{sub_score:.1f} × {sub_weight:.2f} = <strong>{contribution}</strong></span>'
+            elif rule_code and "ADJ" in rule_code:
+                score_effect_html = '<span style="font-size:9px;color:#888;">Adjustment</span>'
+            else:
+                score_effect_html = '<span style="font-size:9px;color:#aaa;">—</span>'
+
             status_col  = "#1A7A3A" if verified else RED
             status_text = "Retrieved" if verified else "Defaulted"
             conf_col    = _conf_colour(confidence)
@@ -140,11 +211,36 @@ def generate_evidence_book(
               <td style="padding:5px 8px;font-size:9px;color:{conf_col};">{confidence.title()}</td>
               <td style="padding:5px 8px;font-size:9px;color:#777;font-family:monospace;">{rule_code}</td>
               <td style="padding:5px 8px;font-size:9px;color:#888;">{ret_date[:10] if ret_date else ''}</td>
+              <td style="padding:5px 8px;font-size:9px;color:#555;">{score_effect_html}</td>
             </tr>"""
 
-    # -----------------------------------------------------------------------
-    # DATA GAPS TABLE
-    # -----------------------------------------------------------------------
+    # ── Source category counts ────────────────────────────────────────
+    cat_counts = {}
+    for dim_data in envelope.get("dimensions", {}).values():
+        for ef in dim_data.get("evidence_fields", []):
+            cat = _categorise_source(ef.get("source", ""))
+            cat_counts[cat] = cat_counts.get(cat, 0) + 1
+
+    rules_count = sum(
+        len(dim_data.get("rules_applied", []))
+        for dim_data in envelope.get("dimensions", {}).values()
+    )
+
+    # Source category panel
+    cat_html = "".join(
+        f'<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #2a3f55;">'        f'<span style="font-size:9px;color:#888;">{cat}</span>'        f'<span style="font-size:10px;font-weight:bold;color:{AMBER};">{count}</span></div>'
+        for cat, count in sorted(cat_counts.items(), key=lambda x: -x[1])
+        if count > 0
+    )
+
+    # Infographic bars
+    def _bar(n, max_n, width=120):
+        filled = max(4, int((n / max(max_n, 1)) * width))
+        return (f'<div style="background:#2a3f55;border-radius:2px;height:8px;width:{width}px;margin:3px 0;">'                f'<div style="background:{AMBER};border-radius:2px;height:8px;width:{filled}px;"></div></div>')
+
+    max_val = max(unique_sources, total_fields, rules_count, len(floor_codes) or 1)
+
+    # ── DATA GAPS TABLE ────────────────────────────────────────────────
     gaps = envelope.get("data_gaps_summary", [])
     gaps_html = ""
     if gaps:
@@ -269,25 +365,62 @@ def generate_evidence_book(
   </div>
 </div>
 
-<!-- ASSESSMENT INTEGRITY PANEL -->
+<!-- ASSESSMENT INTEGRITY + CHAIN OF EVIDENCE INFOGRAPHIC -->
 <h2>Assessment Integrity</h2>
-<table style="width:100%;border-collapse:collapse;background:#f9f6f0;border:1px solid #e8e0d0;">
-  <tr>
-    {''.join(
-        f'<td style="padding:14px 16px;text-align:center;border-right:1px solid #e8e0d0;">'
-        f'<div style="font-size:22px;font-weight:bold;color:{AMBER};">{val}</div>'
-        f'<div style="font-size:9px;color:{NAVY};text-transform:uppercase;letter-spacing:0.4px;margin-top:4px;">{label}</div>'
-        f'</td>'
-        for val, label in [
-            (total_fields, "Evidence fields assessed"),
-            (retrieved_fields, "Fields retrieved"),
-            (defaulted_fields, "Fields defaulted"),
-            (unique_sources, "Public sources queried"),
-            ("0", "Manual analyst edits"),
-            ("Yes", "Deterministic replay available"),
-            (result.rules_version, "Rules version locked"),
-        ]
-    )}
+<table style="width:100%;border-collapse:collapse;">
+  <tr style="vertical-align:top;">
+    <td style="width:58%;padding-right:12px;">
+
+      <!-- Numeric integrity panel -->
+      <table style="width:100%;border-collapse:collapse;background:{NAVY};">
+        <tr>
+          {''.join(
+            f'<td style="padding:10px 12px;text-align:center;border-right:1px solid #2a3f55;">'
+            f'<div style="font-size:18px;font-weight:bold;color:{AMBER};">{val}</div>'
+            f'<div style="font-size:8px;color:#888;text-transform:uppercase;letter-spacing:0.3px;margin-top:2px;">{label}</div>'
+            f'</td>'
+            for val, label in [
+              (total_fields, "Fields assessed"),
+              (retrieved_fields, "Retrieved"),
+              (defaulted_fields, "Defaulted"),
+              (unique_sources, "Sources queried"),
+              ('<span style="color:#1A7A3A;font-weight:bold;">0</span>', "Manual edits"),
+              ("Yes", "Replay available"),
+              (result.rules_version, "Rules locked"),
+            ]
+          )}
+        </tr>
+      </table>
+
+      <!-- SEAM Chain of Evidence infographic -->
+      <div style="margin-top:10px;background:{NAVY};padding:12px 14px;">
+        <div style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:10px;">SEAM Chain of Evidence</div>
+        {''.join(
+          f'<div style="margin-bottom:7px;">'          f'<div style="display:flex;justify-content:space-between;margin-bottom:2px;">'          f'<span style="font-size:9px;color:#aaa;">{label}</span>'          f'<span style="font-size:10px;font-weight:bold;color:{AMBER};">{count}</span>'          f'</div>'          f'{_bar(count, max_val)}'          f'</div>'
+          for label, count in [
+            ("Public sources searched", unique_sources),
+            ("Evidence fields retrieved", retrieved_fields),
+            ("Scoring rules applied", rules_count),
+            ("Floor rules triggered", len(floor_codes)),
+          ]
+        )}
+        <div style="margin-top:10px;padding-top:8px;border-top:1px solid #2a3f55;">
+          <span style="font-size:9px;color:#888;">Decision: </span>
+          <span style="font-size:12px;font-weight:bold;color:white;background:{vc_colour};padding:2px 10px;border-radius:2px;">{result.verdict}</span>
+        </div>
+      </div>
+    </td>
+
+    <!-- Source categories -->
+    <td style="width:42%;padding-left:8px;">
+      <div style="background:{NAVY};padding:12px 14px;height:100%;box-sizing:border-box;">
+        <div style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:10px;">Sources by Category</div>
+        {cat_html}
+        <div style="margin-top:10px;padding-top:8px;border-top:1px solid #2a3f55;font-size:9px;color:#666;">
+          Every source named in the Evidence Provenance Register.
+        </div>
+      </div>
+    </td>
   </tr>
 </table>
 
@@ -376,12 +509,12 @@ def generate_evidence_book(
 </table>
 
 <div style="margin-top:24px;padding:14px 18px;background:#f9f6f0;border-left:3px solid {AMBER};">
-  <div style="font-size:10px;font-weight:bold;color:{NAVY};margin-bottom:6px;">Challenge any conclusion</div>
+  <div style="font-size:10px;font-weight:bold;color:{NAVY};margin-bottom:6px;">Every conclusion is independently verifiable.</div>
   <div style="font-size:10px;color:#444;line-height:1.6;">
-    Every conclusion in the Investment Report is traceable to a specific row in the Evidence Provenance Register below.
-    Each row carries an Evidence ID, the public source, retrieval status, confidence level, and the rule code that governs its scoring impact.
-    If any finding appears incorrect, locate the Evidence ID and verify the named public source directly.
-    The verdict cannot be altered without changing the underlying evidence or the rule set — both of which are version-locked.
+    Every conclusion in this Evidence Book is traceable to a named public source listed in the Evidence Provenance Register.
+    Each row carries an Evidence ID, the public source, retrieval status, confidence level, and the rule code governing its scoring impact.
+    To verify any finding: locate the Evidence ID, visit the named public source, and confirm the value independently.
+    The verdict cannot be altered without changing the underlying evidence or the rule set. Both are version-locked.
   </div>
 </div>
 
@@ -432,6 +565,7 @@ def generate_evidence_book(
     <th style="padding:5px 8px;color:white;font-size:8px;text-align:left;">Confidence</th>
     <th style="padding:5px 8px;color:white;font-size:8px;text-align:left;">Rule</th>
     <th style="padding:5px 8px;color:white;font-size:8px;text-align:left;">Retrieved</th>
+    <th style="padding:5px 8px;color:white;font-size:8px;text-align:left;">Score Effect</th>
   </tr>
   {register_rows}
 </table>
@@ -480,4 +614,5 @@ def generate_evidence_book(
     output_path = os.path.join(output_dir, f"{safe_name}_SEAM_EvidenceBook.pdf")
     HTML(string=html).write_pdf(output_path)
     return output_path
+
 
