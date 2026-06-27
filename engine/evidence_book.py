@@ -238,6 +238,7 @@ def generate_evidence_book(
         filled = max(4, int((n / max(max_n, 1)) * width))
         return (f'<div style="background:#2a3f55;border-radius:2px;height:8px;width:{width}px;margin:3px 0;">'                f'<div style="background:{AMBER};border-radius:2px;height:8px;width:{filled}px;"></div></div>')
 
+    floor_codes = envelope.get("floor_rules_triggered", [])
     max_val = max(unique_sources, total_fields, rules_count, len(floor_codes) or 1)
 
     # ── DATA GAPS TABLE ────────────────────────────────────────────────
@@ -271,7 +272,6 @@ def generate_evidence_book(
     # -----------------------------------------------------------------------
     # FLOOR RULES TABLE
     # -----------------------------------------------------------------------
-    floor_codes = envelope.get("floor_rules_triggered", [])
     floors_html = ""
     if floor_codes:
         floor_rows = "".join(
@@ -614,5 +614,6 @@ def generate_evidence_book(
     output_path = os.path.join(output_dir, f"{safe_name}_SEAM_EvidenceBook.pdf")
     HTML(string=html).write_pdf(output_path)
     return output_path
+
 
 
