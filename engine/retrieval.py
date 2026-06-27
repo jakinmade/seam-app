@@ -364,11 +364,38 @@ def _retrieve_fields(api_key: str, asset_name: str, jurisdiction: str,
 # MAIN ENTRY POINT
 # ---------------------------------------------------------------------------
 
-# In-process cache — keyed by (asset_name.lower(), jurisdiction.lower())
-# Prevents repeat API calls for the same asset within a session.
+# Persistent file-based cache — survives redeployments.
+# Keyed by (asset_name.lower(), jurisdiction.lower()).
+# Falls back to in-process dict if file system unavailable.
 import time as _time
-_RETRIEVAL_CACHE: dict = {}
+import pathlib as _pathlib
+import pickle as _pickle
+
 _CACHE_TTL_SECONDS = 86400  # 24 hours
+_CACHE_DIR = _pathlib.Path("/tmp/seam_retrieval_cache")
+_CACHE_DIR.mkdir(exist_ok=True)
+
+def _cache_path(key: tuple) -> _pathlib.Path:
+    safe = f"{key[0]}_{key[1]}".replace(" ", "_").replace("/", "_")
+    return _CACHE_DIR / f"{safe}.pkl"
+
+def _cache_get(key: tuple):
+    try:
+        p = _cache_path(key)
+        if p.exists():
+            entry = _pickle.loads(p.read_bytes())
+            if (_time.time() - entry["ts"]) < _CACHE_TTL_SECONDS:
+                return entry
+    except Exception:
+        pass
+    return None
+
+def _cache_set(key: tuple, asset, sources):
+    try:
+        entry = {"asset": asset, "sources": sources, "ts": _time.time()}
+        _cache_path(key).write_bytes(_pickle.dumps(entry))
+    except Exception:
+        pass
 
 
 def retrieve_asset_data(asset_name: str, jurisdiction: str,
@@ -377,9 +404,13 @@ def retrieve_asset_data(asset_name: str, jurisdiction: str,
 
     # Cache check — skip API entirely if recently retrieved
     cache_key = (asset_name.strip().lower(), jurisdiction.strip().lower())
-    cached = _RETRIEVAL_CACHE.get(cache_key)
-    if cached and (_time.time() - cached["ts"]) < _CACHE_TTL_SECONDS:
+    cached = _cache_get(cache_key)
+    if cached:
         return cached["asset"], cached["sources"]
+
+
+
+
 
     # Jurisdiction code map — used for seeds regardless of API availability
     jur_map = {
@@ -446,11 +477,8 @@ def retrieve_asset_data(asset_name: str, jurisdiction: str,
     }
     if retrieval_error:
         sources["api_error"] = retrieval_error
-
     asset_input = _dict_to_asset_input(retrieved)
-
-    # Store in cache
-    _RETRIEVAL_CACHE[cache_key] = {"asset": asset_input, "sources": sources, "ts": _time.time()}
+    _cache_set(cache_key, asset_input, sources)
 
     return asset_input, sources
 
