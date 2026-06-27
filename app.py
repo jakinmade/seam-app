@@ -394,12 +394,12 @@ if page == "Assessment":
             # STEP 6 — Watch list
             # Generate Evidence Book
             try:
-                eb_path = generate_evidence_book(result, output_dir="output")
+                eb_path = generate_evidence_book(result, output_dir="/tmp/seam")
                 st.session_state.evidence_book_path = eb_path
             except Exception as _eb_err:
                 st.session_state.evidence_book_path = None
-                # Surface error in expander for debugging
                 st.session_state.evidence_book_error = str(_eb_err)
+                st.warning(f"Evidence Book generation failed: {str(_eb_err)[:200]}")
 
             st.session_state.watch_list = record_assessment(st.session_state.watch_list, result)
             alert = st.session_state.watch_list.get(result.asset_id, {}).get("alert")
