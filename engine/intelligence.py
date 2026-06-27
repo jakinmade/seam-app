@@ -182,6 +182,31 @@ Return exactly this JSON. No preamble. No markdown. No explanation:
     "water_licence": "Permitted | Pending | Not Filed | Unknown",
     "constraint_summary": "one sentence — overall bankability constraint status",
     "dfi_readiness": "Ready | Conditional | Not Ready"
+  },
+  "ic_summary": {
+    "phase_recommendation": "Proceed to Phase II Due Diligence | Proceed with Conditions to Phase II | Place on Watch | Do Not Proceed",
+    "rationale": "two sentences — direct, investment-committee language. Why this recommendation. No hedging.",
+    "time_to_decision": "e.g. 30–60 days | 60–90 days | 90+ days | Not recommended",
+    "investment_strength": "Strong | Moderate | Weak",
+    "operational_risk": "Low | Medium | High | Critical",
+    "governance_risk": "Low | Medium | High | Critical",
+    "political_risk": "Low | Medium | High | Critical",
+    "capital_readiness": "Ready | Conditional | Not Ready"
+  },
+  "priority_actions": [
+    {
+      "rank": 1,
+      "action": "short imperative — e.g. Verify beneficial ownership chain",
+      "dimension": "D2",
+      "effort": "Low | Medium | High",
+      "diligence_delay_days": 14
+    }
+  ],
+  "remediation": {
+    "expected_score_after": 0,
+    "score_sensitivity": 3,
+    "estimated_effort": "Low | Medium | High",
+    "estimated_diligence_delay": "e.g. 30–45 days"
   }
 }"""
 
@@ -432,6 +457,23 @@ def _mock_intelligence(prompt: str) -> dict:
             "lobito_corridor_relevant": False,
             "price_trend_12m": "Stable",
             "demand_driver": "Live in Streamlit"
+        },
+        "ic_summary": {
+            "phase_recommendation": "Live in Streamlit",
+            "rationale": "Live in Streamlit",
+            "time_to_decision": "Live in Streamlit",
+            "investment_strength": "Moderate",
+            "operational_risk": "Medium",
+            "governance_risk": "Medium",
+            "political_risk": "Medium",
+            "capital_readiness": "Conditional"
+        },
+        "priority_actions": [],
+        "remediation": {
+            "expected_score_after": 0,
+            "score_sensitivity": 3,
+            "estimated_effort": "Medium",
+            "estimated_diligence_delay": "Live in Streamlit"
         }
     }
 

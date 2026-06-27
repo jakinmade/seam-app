@@ -86,6 +86,9 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
     benchmarks      = intel.get("_benchmarks", {})  # injected by app.py
     intel_items    = intel.get("investor_intelligence", [])
     verdict_text   = intel.get("verdict_section", "")
+    ic_sum         = intel.get("ic_summary", {})
+    priority_acts  = intel.get("priority_actions", [])
+    remediation    = intel.get("remediation", {})
 
     # Field counts
     total_fields = 19
@@ -162,6 +165,62 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
 
     # --- Evidence bar ---
     ev_bar = evidence_bar_svg(retrieved_count, total_fields)
+
+    # --- IC Summary panel ---
+    def _risk_colour(level):
+        return {"Low": "#1A7A3A", "Strong": "#1A7A3A", "Ready": "#1A7A3A",
+                "Medium": "#B8860B", "Moderate": "#B8860B", "Conditional": "#B8860B",
+                "High": "#C65C00", "Weak": "#C65C00",
+                "Critical": "#CC0000", "Not Ready": "#CC0000"}.get(level, "#888")
+
+    def _risk_cell(label, value):
+        col = _risk_colour(value)
+        return (
+            f'<td style="padding:10px 14px;border-right:1px solid #2a3f55;vertical-align:top;">'
+            f'<div style="font-size:9px;color:#666;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px;">{label}</div>'
+            f'<div style="font-size:13px;font-weight:bold;color:{col};">{value or "—"}</div>'
+            f'</td>'
+        )
+
+    ic_panel = ""
+    if ic_sum:
+        phase_rec = ic_sum.get("phase_recommendation", "")
+        rationale = ic_sum.get("rationale", "")
+        ttd       = ic_sum.get("time_to_decision", "")
+        phase_col = vc_colour
+
+        risk_cells = (
+            _risk_cell("Investment Strength", ic_sum.get("investment_strength", "")) +
+            _risk_cell("Operational Risk",    ic_sum.get("operational_risk", "")) +
+            _risk_cell("Governance Risk",     ic_sum.get("governance_risk", "")) +
+            _risk_cell("Political Risk",      ic_sum.get("political_risk", "")) +
+            f'<td style="padding:10px 14px;vertical-align:top;">'
+            f'<div style="font-size:9px;color:#666;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px;">Capital Readiness</div>'
+            f'<div style="font-size:13px;font-weight:bold;color:{_risk_colour(ic_sum.get("capital_readiness",""))};">{ic_sum.get("capital_readiness","—")}</div>'
+            f'</td>'
+        )
+
+        ic_panel = f"""
+    <div style="margin-bottom:20px;border:1.5px solid {NAVY};border-radius:3px;overflow:hidden;">
+      <table style="width:100%;border-collapse:collapse;">
+        <tr>
+          <td style="background:{NAVY};padding:12px 18px;width:60%;vertical-align:top;">
+            <div style="font-size:9px;color:#666;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;">Investment Committee View</div>
+            <div style="font-size:15px;font-weight:bold;color:{AMBER};line-height:1.2;margin-bottom:8px;">{phase_rec}</div>
+            <div style="font-size:10px;color:#bbb;line-height:1.5;">{rationale}</div>
+          </td>
+          <td style="background:#0f1e2e;padding:12px 18px;width:40%;vertical-align:top;">
+            <div style="font-size:9px;color:#666;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;">Time to Investment Decision</div>
+            <div style="font-size:15px;font-weight:bold;color:{WHITE};">{ttd}</div>
+            <div style="font-size:9px;color:#666;margin-top:10px;text-transform:uppercase;letter-spacing:0.5px;">Evidence Confidence</div>
+            <div style="font-size:13px;font-weight:bold;color:{WHITE};margin-top:3px;">{v_conf}</div>
+          </td>
+        </tr>
+        <tr style="background:#f4f4f4;">
+          {risk_cells}
+        </tr>
+      </table>
+    </div>"""
 
     # --- Critical risks ---
     risks_html = ""
@@ -274,7 +333,10 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
                     <span style="font-size:11px;font-weight:bold;color:{NAVY};">{d.code}</span>
                     <span style="font-size:10px;color:#555;margin-left:5px;">{d.name}</span>
                   </div>
-                  <span style="font-size:19px;font-weight:bold;color:{NAVY};">{d.adjusted_score:.0f}<span style="font-size:9px;color:#aaa;font-weight:normal;">/100</span></span>
+                  <div style="text-align:right;">
+                    <span style="font-size:19px;font-weight:bold;color:{NAVY};">{d.adjusted_score:.0f}<span style="font-size:9px;color:#aaa;font-weight:normal;">/100</span></span>
+                    <div style="font-size:9px;color:#aaa;margin-top:1px;">±3 pts sensitivity</div>
+                  </div>
                 </div>
                 {score_bar(d.adjusted_score, 160, dark=False)}
                 <div style="display:flex;gap:10px;margin-top:5px;margin-bottom:6px;">
@@ -536,6 +598,9 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
   </tr>
 </table>
 
+<!-- IC SUMMARY -->
+{ic_panel}
+
 <!-- DECISION PANEL -->
 {decision_panel}
 
@@ -561,13 +626,36 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
 <h2>Verdict and Next Action</h2>
 <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
   <tr>
-    <td style="background:{vc_colour};padding:14px 20px;">
+    <td style="background:{vc_colour};padding:14px 20px;width:60%;">
       <div style="font-size:9px;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Verdict</div>
       <div style="font-size:20px;font-weight:bold;color:{WHITE};">{result.verdict}</div>
+    </td>
+    <td style="background:#f4f4f4;padding:14px 20px;width:40%;vertical-align:middle;">
+      {''.join([
+        f'<div style="margin-bottom:4px;"><span style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:0.4px;">Expected score after remediation</span></div>'
+        f'<div style="font-size:20px;font-weight:bold;color:{NAVY};">{remediation.get("expected_score_after","—")}<span style="font-size:9px;color:#aaa;font-weight:normal;"> / 100</span></div>'
+        f'<div style="font-size:10px;color:#888;margin-top:4px;">Sensitivity: ±{remediation.get("score_sensitivity", 3)} pts &nbsp;|&nbsp; Effort: {remediation.get("estimated_effort","—")} &nbsp;|&nbsp; Delay: {remediation.get("estimated_diligence_delay","—")}</div>'
+      ]) if remediation else ''}
     </td>
   </tr>
 </table>
 <div style="font-size:11px;color:#333;line-height:1.6;margin-bottom:12px;">{verdict_text.replace(chr(10), "<br>")}</div>
+
+{''.join([
+  f'<div style="margin-bottom:20px;">'
+  f'<div style="font-size:10px;font-weight:bold;color:{NAVY};text-transform:uppercase;letter-spacing:0.5px;border-bottom:1.5px solid {AMBER};padding-bottom:4px;margin-bottom:12px;">Priority Actions Before Due Diligence</div>'
+  + ''.join([
+    f'<div style="display:flex;align-items:flex-start;margin-bottom:10px;">'
+    f'<div style="min-width:22px;height:22px;background:{NAVY};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:bold;color:{WHITE};margin-right:10px;flex-shrink:0;">{a["rank"]}</div>'
+    f'<div style="flex:1;">'
+    f'<div style="font-size:11px;font-weight:bold;color:#222;">{a["action"]}</div>'
+    f'<div style="font-size:9px;color:#888;margin-top:2px;">{a.get("dimension","")} &nbsp;|&nbsp; Effort: {a.get("effort","—")} &nbsp;|&nbsp; Est. delay: {a.get("diligence_delay_days","—")} days</div>'
+    f'</div></div>'
+    for a in priority_acts
+  ]) +
+  f'</div>'
+]) if priority_acts else ''}
+
 {floor_html}
 <div style="margin-top:14px;padding:12px 16px;background:#f8f8f8;border-left:3px solid {AMBER};">
   <div style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;">Next Action</div>
