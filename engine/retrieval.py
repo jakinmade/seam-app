@@ -221,7 +221,7 @@ def _extract_json(text: str) -> str:
 def _call_api(api_key: str, system: str, user: str, use_search: bool = True) -> str:
     payload = {
         "model": "claude-sonnet-4-6",
-        "max_tokens": 6000,
+        "max_tokens": 2000,
         "temperature": 0,
         "system": system,
         "messages": [{"role": "user", "content": user}]
@@ -355,24 +355,8 @@ def _retrieve_fields(api_key: str, asset_name: str, jurisdiction: str,
         raw = _call_api(api_key, RETRIEVAL_SYSTEM_PROMPT, prompt, use_search=False)
         result = _parse(raw)
 
-    # If retrieval came back with very few fields populated, retry with stronger directive
-    if _count_retrieved(result) < 3:
-        retry_prompt = (
-            prompt +
-            "\n\nCRITICAL: Your previous response had fewer than 3 fields populated. "
-            "You must search more aggressively. For Zambia assets: EITI compliant = true, "
-            "search Fraser Institute Zambia 2024, search World Bank WGI Zambia 2024. "
-            "For KCM/Vedanta: search Vedanta Resources annual report, search Konkola Copper Mines production. "
-            "Populate every field you can find. Do not return nulls for knowable jurisdiction-level data."
-        )
-        try:
-            raw2 = _call_api(api_key, RETRIEVAL_SYSTEM_PROMPT, retry_prompt, use_search=True)
-            result2 = _parse(raw2)
-            if _count_retrieved(result2) > _count_retrieved(result):
-                result = result2
-        except Exception:
-            pass  # Keep original result
-
+    # No auto-retry — seed layer covers gaps deterministically.
+    # Retry was the primary cause of runaway API spend.
     return result
 
 
@@ -380,9 +364,22 @@ def _retrieve_fields(api_key: str, asset_name: str, jurisdiction: str,
 # MAIN ENTRY POINT
 # ---------------------------------------------------------------------------
 
+# In-process cache — keyed by (asset_name.lower(), jurisdiction.lower())
+# Prevents repeat API calls for the same asset within a session.
+import time as _time
+_RETRIEVAL_CACHE: dict = {}
+_CACHE_TTL_SECONDS = 3600  # 1 hour
+
+
 def retrieve_asset_data(asset_name: str, jurisdiction: str,
                         context: str = "") -> tuple[AssetInput, dict]:
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+
+    # Cache check — skip API entirely if recently retrieved
+    cache_key = (asset_name.strip().lower(), jurisdiction.strip().lower())
+    cached = _RETRIEVAL_CACHE.get(cache_key)
+    if cached and (_time.time() - cached["ts"]) < _CACHE_TTL_SECONDS:
+        return cached["asset"], cached["sources"]
 
     # Jurisdiction code map — used for seeds regardless of API availability
     jur_map = {
@@ -450,7 +447,12 @@ def retrieve_asset_data(asset_name: str, jurisdiction: str,
     if retrieval_error:
         sources["api_error"] = retrieval_error
 
-    return _dict_to_asset_input(retrieved), sources
+    asset_input = _dict_to_asset_input(retrieved)
+
+    # Store in cache
+    _RETRIEVAL_CACHE[cache_key] = {"asset": asset_input, "sources": sources, "ts": _time.time()}
+
+    return asset_input, sources
 
 
 
@@ -548,6 +550,7 @@ def _mock_retrieval(asset_name: str, jurisdiction: str) -> AssetInput:
         wb_rule_of_law_percentile=None,
         wb_regulatory_quality_percentile=None,
     )
+
 
 
 
