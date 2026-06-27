@@ -185,7 +185,7 @@ Return exactly this JSON. No preamble. No markdown. No explanation:
   },
   "ic_summary": {
     "phase_recommendation": "Proceed to Phase II Due Diligence | Proceed with Conditions to Phase II | Place on Watch | Do Not Proceed",
-    "rationale": "two sentences — direct, investment-committee language. Why this recommendation. No hedging.",
+    "rationale": "one sentence — direct IC language, no hedging.",
     "time_to_decision": "e.g. 30–60 days | 60–90 days | 90+ days | Not recommended",
     "investment_strength": "Strong | Moderate | Weak",
     "operational_risk": "Low | Medium | High | Critical",
@@ -196,12 +196,13 @@ Return exactly this JSON. No preamble. No markdown. No explanation:
   "priority_actions": [
     {
       "rank": 1,
-      "action": "short imperative — e.g. Verify beneficial ownership chain",
+      "action": "short imperative",
       "dimension": "D2",
       "effort": "Low | Medium | High",
       "diligence_delay_days": 14
     }
   ],
+  "priority_actions_note": "Maximum 3 actions. Rank by materiality to verdict.",
   "remediation": {
     "expected_score_after": 0,
     "score_sensitivity": 3,
@@ -363,7 +364,7 @@ def call_intelligence_engine(prompt: str, cache_key: str = None) -> dict:
 
     payload = json.dumps({
         "model": "claude-sonnet-4-6",
-        "max_tokens": 1500,
+        "max_tokens": 2000,
         "temperature": 0,
         "system": SEAM_SYSTEM_PROMPT,
         "messages": [{"role": "user", "content": prompt}]
