@@ -391,6 +391,8 @@ if page == "Assessment":
                 st.session_state.evidence_book_path = eb_path
             except Exception as _eb_err:
                 st.session_state.evidence_book_path = None
+                # Surface error in expander for debugging
+                st.session_state.evidence_book_error = str(_eb_err)
 
             st.session_state.watch_list = record_assessment(st.session_state.watch_list, result)
             alert = st.session_state.watch_list.get(result.asset_id, {}).get("alert")
@@ -747,6 +749,7 @@ They do not constitute due diligence and are not a substitute for independent te
 Every investor must conduct their own assessment appropriate to their mandate, jurisdiction and risk appetite.
 Methodology SEAM-M-v1.0 | Rules SEAM-R-v1.0 | akinmade.co.uk | CONFIDENTIAL
 </div>""", unsafe_allow_html=True)
+
 
 
 
