@@ -304,6 +304,30 @@ def check_envelope_hash(result) -> CheckResult:
     )
 
 
+def check_evidence_book(result) -> CheckResult:
+    """Attempt to generate the Evidence Book PDF. Catches silent failures."""
+    try:
+        import tempfile, os
+        from engine.evidence_book import generate_evidence_book
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = generate_evidence_book(result, output_dir=tmpdir)
+            size = os.path.getsize(path)
+            ok = size > 10_000  # Minimum viable PDF
+            return CheckResult(
+                "Evidence Book PDF generates",
+                ok,
+                f"{size:,} bytes" if ok else f"PDF too small ({size} bytes) — likely render failure",
+                "ERROR",
+            )
+    except Exception as e:
+        return CheckResult(
+            "Evidence Book PDF generates",
+            False,
+            f"{type(e).__name__}: {str(e)[:120]}",
+            "ERROR",
+        )
+
+
 # ---------------------------------------------------------------------------
 # CORE RUNNER
 # ---------------------------------------------------------------------------
@@ -341,6 +365,7 @@ def run_single(tc: dict) -> TestResult:
     checks.append(check_evidence_completeness(result))
     checks.append(check_commodity_populated(inp))
     checks.append(check_envelope_hash(result))
+    checks.append(check_evidence_book(result))
 
     passed  = sum(1 for c in checks if c.passed)
     failed  = sum(1 for c in checks if not c.passed and c.severity == "ERROR")
