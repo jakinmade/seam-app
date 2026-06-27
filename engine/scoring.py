@@ -287,13 +287,13 @@ def score_d3(inp, R):
     adjusted = min(100, max(0, base + adj_total))
     ef.append(EvidenceField("resource_estimate_standard", inp.resource_estimate_standard,
         source="NI 43-101 / JORC filing — exchange regulatory announcement",
-        confidence="high", verified=inp.resource_estimate_standard != "none", rule_code="D3-RES-001"))
+        confidence="high", verified=inp.resource_estimate_standard not in (None, "none"), rule_code="D3-RES-001"))
     ef.append(EvidenceField("reserve_classification", inp.reserve_classification,
         source="Technical report / competent person report",
-        confidence="high", verified=inp.reserve_classification != "none", rule_code="D3-RC-001"))
+        confidence="high", verified=inp.reserve_classification not in (None, "none"), rule_code="D3-RC-001"))
     ef.append(EvidenceField("production_data_availability", inp.production_data_availability,
         source="Operator annual report / quarterly production release",
-        confidence="high", verified=inp.production_data_availability != "none", rule_code="D3-PD-001"))
+        confidence="high", verified=inp.production_data_availability not in (None, "none"), rule_code="D3-PD-001"))
     ef.append(EvidenceField("exploration_stage", inp.exploration_stage,
         source="Operator disclosure / exchange filing",
         confidence="high", verified=True, rule_code="D3-ES-001"))
@@ -347,16 +347,16 @@ def score_d4(inp, R):
     adjusted = min(100, max(0, base + adj_total))
     ef.append(EvidenceField("licence_holder_status", inp.licence_holder_status,
         source=f"Mining licence register — {regime['compliance_portal']}",
-        confidence="high", verified=inp.licence_holder_status != "other", rule_code="D4-LH-001"))
+        confidence="high", verified=inp.licence_holder_status not in (None, "other"), rule_code="D4-LH-001"))
     ef.append(EvidenceField("locas_filing_status", inp.locas_filing_status,
         source=f"Local content compliance portal — {regime['compliance_portal']}",
-        confidence="high", verified=inp.locas_filing_status != "not_filed", rule_code="D4-FILING-001"))
+        confidence="high", verified=inp.locas_filing_status not in (None, "not_filed"), rule_code="D4-FILING-001"))
     ef.append(EvidenceField("local_procurement_evidence", inp.local_procurement_evidence,
         source="Operator sustainability report / local content audit",
-        confidence="medium", verified=inp.local_procurement_evidence != "none", rule_code="D4-LP-001"))
+        confidence="medium", verified=inp.local_procurement_evidence not in (None, "none"), rule_code="D4-LP-001"))
     ef.append(EvidenceField("supplier_development_programme", inp.supplier_development_programme,
         source="Operator CSR report / government local content register",
-        confidence="medium", verified=inp.supplier_development_programme != "none", rule_code="D4-SDP-001"))
+        confidence="medium", verified=inp.supplier_development_programme not in (None, "none"), rule_code="D4-SDP-001"))
     ef.append(EvidenceField("reserved_services_non_local", inp.reserved_services_non_local,
         source=f"Reserved services gazette — {regime['reserved_services_rule']}",
         confidence="medium", verified=True, rule_code="D4-ADJ-001"))
@@ -408,16 +408,16 @@ def score_d5(inp, R):
     adjusted = min(100, max(0, base))
     ef.append(EvidenceField("power_supply", inp.power_supply,
         source="Operator technical report / government energy regulator",
-        confidence="medium", verified=inp.power_supply != "none", rule_code="D5-PWR-001"))
+        confidence="medium", verified=inp.power_supply not in (None, "none"), rule_code="D5-PWR-001"))
     ef.append(EvidenceField("road_access", inp.road_access,
         source="Government road authority / operator site disclosure",
-        confidence="medium", verified=inp.road_access != "none", rule_code="D5-ROAD-001"))
+        confidence="medium", verified=inp.road_access not in (None, "none"), rule_code="D5-ROAD-001"))
     ef.append(EvidenceField("rail_access", inp.rail_access,
         source="National railway operator / Lobito Corridor project registry",
-        confidence="medium", verified=inp.rail_access != "none", rule_code="D5-RAIL-001"))
+        confidence="medium", verified=inp.rail_access not in (None, "none"), rule_code="D5-RAIL-001"))
     ef.append(EvidenceField("water_supply", inp.water_supply,
         source="Water licence register / environmental permit",
-        confidence="medium", verified=inp.water_supply != "none", rule_code="D5-WATER-001"))
+        confidence="medium", verified=inp.water_supply not in (None, "none"), rule_code="D5-WATER-001"))
     ef.append(EvidenceField("port_distance_km", inp.port_distance_km,
         source="Geographic calculation — nearest deep water port",
         confidence="high", verified=inp.port_distance_km is not None, rule_code="D5-PORT-001"))
@@ -436,7 +436,7 @@ def score_d6(inp, R):
     dfi = R["d6_dfi_scores"].get(inp.active_dfi_engagement, 0.0)
     sub["active_dfi_engagement"] = {"score": dfi, "weight": sw["dfi_engagement"]}
     rules.append("D6-DFI-001 v1.0")
-    ef.append(EvidenceField("active_dfi_engagement", inp.active_dfi_engagement, source="IFC/AfDB/BII project portals", confidence="high", rule_code="D6-DFI-001"))
+    ef.append(EvidenceField("active_dfi_engagement", inp.active_dfi_engagement, source="IFC/AfDB/BII project portals", confidence="high", verified=inp.active_dfi_engagement is not None, rule_code="D6-DFI-001"))
 
     lv = R["d6_listed_scores"].get(inp.listed_vehicle, 0.0)
     sub["listed_vehicle"] = {"score": lv, "weight": sw["listed_vehicle"]}
@@ -454,10 +454,10 @@ def score_d6(inp, R):
     adjusted = min(100, max(0, base))
     ef.append(EvidenceField("listed_vehicle", inp.listed_vehicle,
         source="ASX / TSX / AIM / LSE exchange announcements",
-        confidence="high", verified=inp.listed_vehicle != "unlisted", rule_code="D6-LV-001"))
+        confidence="high", verified=inp.listed_vehicle is not None, rule_code="D6-LV-001"))
     ef.append(EvidenceField("recent_capital_raise", inp.recent_capital_raise,
         source="Exchange regulatory announcement / investor presentation",
-        confidence="high", verified=inp.recent_capital_raise != "none", rule_code="D6-CR-001"))
+        confidence="high", verified=inp.recent_capital_raise is not None, rule_code="D6-CR-001"))
     ef.append(EvidenceField("gulf_western_investor_linked", inp.gulf_western_investor_linked,
         source="Investor register / Bloomberg / Refinitiv ownership data",
         confidence="medium", verified=True, rule_code="D6-GW-001"))
