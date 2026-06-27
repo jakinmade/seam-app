@@ -156,6 +156,8 @@ def get_regime(jurisdiction_code: str) -> dict:
         "citizen_empowered_min_pct": 25.0,
         "local_procurement_target_pct": 25.0,
         "filing_frequency": "Annual",
+        "compliance_portal": "National mining authority — jurisdiction-specific portal not yet loaded",
+        "reserved_services_rule": "Jurisdiction-specific reserved services rule not yet loaded",
         "notes": "Generic regime applied. Add jurisdiction to local_content_regimes.py for full scoring.",
     }
 
