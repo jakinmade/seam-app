@@ -327,14 +327,18 @@ def _extract_json(text: str) -> str:
     return text
 
 
-def call_intelligence_engine(prompt: str) -> dict:
+def call_intelligence_engine(prompt: str, cache_key: str = None) -> dict:
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         return _mock_intelligence(prompt)
 
+    # Cache check — same inputs = same output, skip API call
+    if cache_key and cache_key in _NARRATIVE_CACHE:
+        return _NARRATIVE_CACHE[cache_key]
+
     payload = json.dumps({
         "model": "claude-sonnet-4-6",
-        "max_tokens": 4000,
+        "max_tokens": 1500,
         "temperature": 0,
         "system": SEAM_SYSTEM_PROMPT,
         "messages": [{"role": "user", "content": prompt}]
@@ -372,7 +376,10 @@ def call_intelligence_engine(prompt: str) -> dict:
         raise ValueError(f"No text in response. stop_reason={data.get('stop_reason')}")
 
     raw = _extract_json(text_blocks[-1])
-    return json.loads(raw)
+    result_data = json.loads(raw)
+    if cache_key:
+        _NARRATIVE_CACHE[cache_key] = result_data
+    return result_data
 
 
 def _mock_intelligence(prompt: str) -> dict:
@@ -429,9 +436,15 @@ def _mock_intelligence(prompt: str) -> dict:
     }
 
 
+# Narrative cache — keyed on envelope hash.
+# Same score = same narrative. Avoids redundant API calls on re-renders.
+_NARRATIVE_CACHE: dict = {}
+
+
 def generate_intelligence(result: ScoringResult, inp: AssetInput) -> dict:
     prompt = build_prompt(result, inp)
-    return call_intelligence_engine(prompt)
+    return call_intelligence_engine(prompt, cache_key=result.envelope_hash)
+
 
 
 
