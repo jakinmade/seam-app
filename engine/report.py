@@ -531,6 +531,7 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
     <td style="text-align:right;vertical-align:bottom;">
       <div style="font-size:9px;color:#aaa;text-transform:uppercase;letter-spacing:0.4px;">Decision ID</div>
       <div style="font-size:11px;font-weight:bold;color:{NAVY};font-family:monospace;">{did}</div>
+      <div style="font-size:9px;color:#888;margin-top:3px;">See Evidence Book for full provenance register</div>
     </td>
   </tr>
 </table>
@@ -616,5 +617,6 @@ def generate_pdf(result: ScoringResult, intel: dict, asset_input, output_dir: st
     output_path = os.path.join(output_dir, f"{safe_name}_SEAM_Report.pdf")
     HTML(string=html).write_pdf(output_path)
     return output_path
+
 
 
