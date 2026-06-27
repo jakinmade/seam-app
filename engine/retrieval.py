@@ -221,7 +221,7 @@ def _extract_json(text: str) -> str:
 def _call_api(api_key: str, system: str, user: str, use_search: bool = True) -> str:
     payload = {
         "model": "claude-sonnet-4-6",
-        "max_tokens": 2000,
+        "max_tokens": 1000,
         "temperature": 0,
         "system": system,
         "messages": [{"role": "user", "content": user}]
@@ -368,7 +368,7 @@ def _retrieve_fields(api_key: str, asset_name: str, jurisdiction: str,
 # Prevents repeat API calls for the same asset within a session.
 import time as _time
 _RETRIEVAL_CACHE: dict = {}
-_CACHE_TTL_SECONDS = 3600  # 1 hour
+_CACHE_TTL_SECONDS = 86400  # 24 hours
 
 
 def retrieve_asset_data(asset_name: str, jurisdiction: str,
