@@ -189,6 +189,25 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
         ttd       = ic_sum.get("time_to_decision", "")
         phase_col = vc_colour
 
+        # Peer context line from benchmark data
+        peer_context = ""
+        if benchmarks and not benchmarks.get("insufficient_data"):
+            asset_score = benchmarks.get("asset_score", result.investment_readiness_score)
+            jur_b = benchmarks.get("jurisdiction")
+            glob_b = benchmarks.get("global")
+            if jur_b and jur_b.get("average") and jur_b.get("count", 0) > 1:
+                avg = jur_b["average"]
+                count = jur_b["count"]
+                direction = "above" if asset_score >= avg else "below"
+                diff = abs(asset_score - avg)
+                peer_context = f'<div style="font-size:9px;color:#666;margin-top:10px;">Scores {diff:.0f} pts {direction} the {asset_input.jurisdiction} average across {count} assessed assets in this session.</div>'
+            elif glob_b and glob_b.get("average") and glob_b.get("count", 0) > 1:
+                avg = glob_b["average"]
+                count = glob_b["count"]
+                direction = "above" if asset_score >= avg else "below"
+                diff = abs(asset_score - avg)
+                peer_context = f'<div style="font-size:9px;color:#666;margin-top:10px;">Scores {diff:.0f} pts {direction} the session average across {count} assessed assets.</div>'
+
         risk_cells = (
             _risk_cell("Investment Strength", ic_sum.get("investment_strength", "")) +
             _risk_cell("Operational Risk",    ic_sum.get("operational_risk", "")) +
@@ -214,6 +233,7 @@ def build_html(result: ScoringResult, intel: dict, asset_input) -> str:
             <div style="font-size:15px;font-weight:bold;color:{WHITE};">{ttd}</div>
             <div style="font-size:9px;color:#666;margin-top:10px;text-transform:uppercase;letter-spacing:0.5px;">Evidence Confidence</div>
             <div style="font-size:13px;font-weight:bold;color:{WHITE};margin-top:3px;">{v_conf}</div>
+            {peer_context}
           </td>
         </tr>
         <tr style="background:#f4f4f4;">
